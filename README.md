@@ -58,7 +58,7 @@ Full rstan installation guide: <https://mc-stan.org/rstan/articles/rstan.html>
 install.packages("remotes")
 
 # Install eDNA_structure from GitHub
-remotes::install_github("yourusername/eDNA_structure")
+remotes::install_github("pedrobdfp/eDNA_structure")
 ```
 
 ### Dependencies
@@ -337,9 +337,12 @@ assignment on year).
 
 If you use this package in published research, please cite:
 
-> [Author(s)] (year). eDNA_structure: Dirichlet-Multinomial Mixture Models for
+> Brandão-Dias et al. (year). Multinomial mixture models from environmental DNA reveal 
+> depth stability and dynamic surface turnover of marine vertebrate communities. Under review
+ 
+> Brandão-Dias et al. (year). eDNA_structure: Dirichlet-Multinomial Mixture Models for
 > eDNA Metabarcoding Community Structure. R package version 0.1.0.
-> https://github.com/yourusername/eDNA_structure
+> https://github.com/pedrobdfp/eDNA_structure
 
 Please also cite Stan:
 
