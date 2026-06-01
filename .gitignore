@@ -1,0 +1,15 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.o
+*.so
+*.dll
+src/RcppExports.cpp
+inst/doc
+/doc/
+/Meta/
+/*.Rcheck/
+/*.tar.gz
+*.rdb
+*.rdx

@@ -1,0 +1,751 @@
+---
+title: "Getting Started with eDNA_structure"
+subtitle: "Fitting Dirichlet-Multinomial Mixture Models to eDNA Metabarcoding Data"
+output:
+  rmarkdown::html_vignette:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+vignette: >
+  %\VignetteIndexEntry{Getting Started with eDNA_structure}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  collapse  = TRUE,
+  comment   = "#>",
+  eval      = FALSE,   # set to TRUE once package is installed with rstan
+  fig.width = 7,
+  fig.height = 5
+)
+```
+
+# Introduction
+
+`eDNA_structure` fits **Dirichlet-Multinomial Mixture (DMM) models** to
+environmental DNA (eDNA) read count data from metabarcoding surveys. The
+central question the model answers is:
+
+> *Given read count data from many sampling locations, how many distinct
+> ecological communities exist in my study area — and what environmental
+> variables predict which community a sample belongs to?*
+
+The model is appropriate whenever you have:
+
+- A matrix of read counts (samples × taxa or samples × ASVs)
+- Two or more sampling locations
+- An interest in whether samples cluster into distinct assemblage types
+- Optionally: environmental covariates you believe drive that clustering
+
+This vignette walks you through the complete workflow from raw data to
+publication-ready figures. All code uses the built-in example dataset so
+you can run everything yourself.
+
+---
+
+# Installation
+
+## Step 1 — Install R
+
+If you do not yet have R installed, download the latest version for your
+operating system from <https://cran.r-project.org/>. Version 4.1.0 or later
+is required.
+
+We also strongly recommend installing **RStudio**, a free graphical interface
+for R: <https://posit.co/download/rstudio-desktop/>.
+
+## Step 2 — Install Stan and rstan
+
+`eDNA_structure` uses the Stan probabilistic programming language for Bayesian
+inference. Stan has its own installation requirements beyond a standard R
+package. Follow the official instructions carefully:
+
+**<https://mc-stan.org/rstan/articles/rstan.html>**
+
+The key steps are:
+
+1. Install a C++ toolchain for your OS:
+   - **Windows**: Install Rtools from <https://cran.r-project.org/bin/windows/Rtools/>
+   - **macOS**: Install the Xcode Command Line Tools (`xcode-select --install` in Terminal)
+   - **Linux**: Ensure `build-essential` (or equivalent) is installed
+
+2. Install `rstan` from CRAN:
+   ```r
+   install.packages("rstan")
+   ```
+
+3. Verify the installation works:
+   ```r
+   library(rstan)
+   example(stan_model, package = "rstan", run.dontrun = TRUE)
+   ```
+   If this runs without errors and produces output like `"SAMPLING FOR MODEL..."`,
+   Stan is working correctly.
+
+## Step 3 — Install eDNA_structure
+
+Install directly from GitHub using the `remotes` package:
+
+```r
+# Install remotes if you don't have it
+install.packages("remotes")
+
+# Install eDNA_structure
+remotes::install_github("yourusername/eDNA_structure")
+```
+
+This will also install the required R package dependencies automatically:
+`ggplot2`, `dplyr`, `tidyr`, `vegan`, `posterior`, `loo`, and `scales`.
+
+## Step 4 — Load the package
+
+```{r load}
+library(eDNA_structure)
+```
+
+---
+
+# Your data and what the model expects
+
+Before fitting a model, it helps to understand exactly what format the
+functions expect. We will use the built-in example dataset to illustrate.
+
+## The count matrix
+
+The most important input is a **sample × taxon count matrix**. The function
+`eDNA_dmm()` accepts:
+
+- A `matrix` with non-negative integer values
+- Or a `data.frame` where every column is numeric
+
+Rows represent **samples** (individual water samples, stations, replicates —
+whatever your unit of observation is). Columns represent **taxa** or **ASVs**
+— taxonomic annotation is not required. The model is equally applicable to
+raw ASV tables and to taxonomically-collapsed count tables.
+
+```{r count_matrix}
+# Load the example dataset
+data <- get_example_data()
+
+# Inspect the count matrix
+dim(data$counts)  # 60 samples × 25 taxa
+
+# First 5 samples, first 6 taxa
+data$counts[1:5, 1:6]
+```
+
+The output will look something like:
+```
+                  Engraulis mordax Sardinops sagax Merluccius productus ...
+STN_001                       412             310                   121
+STN_002                       389             275                    98
+STN_003                        52              41                   487
+```
+
+Each number is the count of sequencing reads assigned to that taxon in that
+sample. These are raw counts — **do not** normalize to proportions before
+fitting. The model handles composition estimation internally.
+
+**Key rules for the count matrix:**
+
+| Requirement | What happens if violated |
+|-------------|--------------------------|
+| All values ≥ 0 | Error with informative message |
+| No NA values | Error with informative message |
+| No all-zero rows | Error — empty samples cannot be modelled |
+| At least 2 columns | Error |
+| Integer values | Warning, then automatic coercion |
+| Row sums ≥ 100 | Warning (very low counts = unreliable compositions) |
+
+## The covariate data frame
+
+The second input (optional) is a **sample × covariate** matrix or data frame.
+If you pass covariates, the model will estimate how each covariate shifts the
+probability that a sample belongs to each community.
+
+```{r covariates}
+# Inspect the covariate data frame
+head(data$covariates)
+```
+
+```
+  sample_id latitude depth year depth_bin
+1   STN_001    39.10    50 2019   shallow
+2   STN_002    39.22    50 2021   shallow
+...
+```
+
+**Critical:** the covariate data frame must have exactly the same number of
+rows as your count matrix, **in the same order**. Each row `i` of the
+covariate data frame corresponds to row `i` of the count matrix. If these
+are misaligned, the model will silently use the wrong covariate values for
+each sample.
+
+A safe way to ensure alignment is to match on sample IDs:
+
+```{r align}
+# Ensure both objects are sorted by sample ID before fitting
+counts_sorted     <- data$counts[order(rownames(data$counts)), ]
+covariates_sorted <- data$covariates[order(data$covariates$sample_id), ]
+
+# Verify alignment
+stopifnot(all(rownames(counts_sorted) == covariates_sorted$sample_id))
+```
+
+### Which covariates to include?
+
+Include any continuous environmental variable you hypothesize might predict
+community membership:
+
+- **Spatial**: latitude, longitude, distance from shore, distance from canyon
+- **Physical**: depth, temperature, salinity, oxygen, turbidity
+- **Derived**: distance from thermocline, distance to seafloor, upwelling index
+
+Covariates are Z-score standardized internally by default (`scale_covariates = TRUE`).
+This means the fitted beta coefficients are directly comparable across
+covariates regardless of their original units. Do not standardize your
+covariates yourself unless you set `scale_covariates = FALSE`.
+
+Categorical variables (e.g., site, year) can be included as numeric dummy
+indicators, but interpret with care: the model treats them as continuous.
+For categorical grouping it is often better to use them for faceting in
+plots (post-hoc) rather than as covariates.
+
+### Preparing a long-format table
+
+If your data come in long format (one row per sample-taxon combination),
+convert to wide format before using this package:
+
+```{r long_to_wide, eval=FALSE}
+library(tidyr)
+library(dplyr)
+
+# Assume `long_df` has columns: sample_id, taxon, reads
+count_matrix <- long_df %>%
+  pivot_wider(
+    names_from  = taxon,
+    values_from = reads,
+    values_fill = 0          # replace missing with 0
+  ) %>%
+  tibble::column_to_rownames("sample_id") %>%
+  as.matrix()
+```
+
+---
+
+# Fitting the model
+
+## Basic fit: K = 2
+
+Start simple. A K = 2 model answers: "can my samples be divided into two
+distinct communities?"
+
+```{r fit_k2}
+# Select which covariates to use
+covariate_matrix <- data$covariates[, c("latitude", "depth")]
+
+# Fit a K=2 DMM
+fit_k2 <- eDNA_dmm(
+  counts     = data$counts,
+  covariates = covariate_matrix,
+  K          = 2
+)
+```
+
+When you run this, you will see Stan's sampling progress printed to the
+console. This is normal. A single chain of 4000 iterations (2000 warmup)
+typically takes 1–5 minutes depending on N and S.
+
+```r
+## Fitting DMM: N=60 samples, S=25 taxa, K=2 communities, P=2 covariates
+## MCMC: 1 chain(s), 4000 iterations (2000 warmup, 2000 sampling)
+## Note: Using single chain (recommended for mixture models)
+## ...
+## Chain 1: Iteration: 1 / 4000 [  0%]  (Warmup)
+## Chain 1: Iteration: 400 / 4000 [ 10%]  (Warmup)
+## ...
+## Chain 1: Sampling completed.
+```
+
+### Why one chain?
+
+Mixture models have a fundamental ambiguity: "Community 1" in one chain
+might correspond to "Community 2" in another (label switching). When chains
+are combined, standard convergence diagnostics (Rhat) appear terrible even
+when each individual chain has converged perfectly. One long chain avoids
+this completely. The within-chain ESS reported in `summary()` is the relevant
+convergence diagnostic.
+
+## Examining the results
+
+```{r print_fit}
+# Quick overview
+print(fit_k2)
+```
+
+```
+eDNA Dirichlet-Multinomial Mixture Model
+=========================================
+  K (communities)  : 2
+  N (samples)      : 60
+  S (taxa)         : 25
+  Covariates       : latitude, depth
+  Mean alpha       : 2.84
+
+Community sizes (MAP assignment):
+  Community 1     : 32 samples (53.3%)
+  Community 2     : 28 samples (46.7%)
+```
+
+```{r summary_fit}
+# Full diagnostics
+summary(fit_k2)
+```
+
+The summary prints:
+
+1. **Alpha (overdispersion)**: typical values for eDNA data are 1–5.
+   High alpha (>10) means counts are nearly multinomial (low overdispersion).
+   Low alpha (~1) means very high overdispersion — typical for eDNA.
+
+2. **Assignment certainty**: the fraction of samples with ≥80% probability
+   of belonging to one community. High certainty (>90%) means the two
+   communities are well-separated.
+
+3. **Beta coefficients**: the effect of each covariate on community membership
+   (relative to the reference community). A 90% CI that does not include 0 is
+   evidence for a real effect.
+
+4. **HMC diagnostics**: look for "No divergences", "No max treedepth",
+   "No low BFMI". Any warnings here should be addressed before interpreting
+   results.
+
+## Accessing model components directly
+
+The fit object is a standard R list. You can access all components directly:
+
+```{r access}
+# Posterior community membership probabilities (one row per sample)
+head(fit_k2$sample_info)
+# Columns: sample_id, prob_comm1, prob_comm2, z_hat, assignment_certainty
+
+# Posterior mean community compositions (K x S matrix)
+fit_k2$pi_mean          # rows = communities, columns = taxa
+round(fit_k2$pi_mean[, 1:5], 3)
+
+# Beta coefficient posterior summaries
+fit_k2$beta_summary
+
+# Posterior mean alpha
+fit_k2$alpha_mean
+```
+
+---
+
+# Choosing K: How many communities?
+
+In practice, you rarely know K in advance. The recommended approach is to fit
+models for K = 2 through K = 6 (or however many is ecologically plausible)
+and compare them using Leave-One-Out cross-validation (LOO-CV).
+
+## Using eDNA_loo()
+
+```{r loo, cache=TRUE}
+# Fit K=2 through K=5 and compare (this takes several minutes)
+loo_result <- eDNA_loo(
+  counts     = data$counts,
+  covariates = covariate_matrix,
+  K_range    = 2:5,
+  iter       = 4000,
+  warmup     = 2000
+)
+```
+
+```{r loo_plot}
+# Elbow plot
+loo_result$plot
+```
+
+```{r loo_table}
+# LOO-ELPD table
+loo_result$loo_table
+```
+
+```
+  K       elpd        se
+1 2 -12043.21  81.34
+2 3 -11812.55  78.92
+3 4 -11834.77  79.61
+4 5 -11849.03  80.15
+```
+
+**Reading the elbow plot:**
+
+- **Higher LOO-ELPD** = better predictive performance = better model
+- The "elbow" is the K beyond which improvements are negligible
+- If two models are within ~2 SE of each other, prefer the simpler one (lower K)
+- Biologically, K should also be interpretable — resist the urge to over-split
+
+For the example data (which was generated with K = 3), the LOO-ELPD should
+peak around K = 3 before levelling off. The model successfully recovers the
+true number of communities.
+
+## Fitting the selected K
+
+Once you have chosen K, fit the final model with more iterations for better
+posterior summaries:
+
+```{r fit_final, cache=TRUE}
+fit <- eDNA_dmm(
+  counts     = data$counts,
+  covariates = covariate_matrix,
+  K          = 3,
+  iter       = 4000,
+  warmup     = 2000
+)
+```
+
+---
+
+# Visualization
+
+All three visualization functions return `ggplot2` objects. This means you
+can:
+
+1. Print them directly to see the plot
+2. Save them with `ggsave()`
+3. Modify them by adding ggplot2 layers
+4. Combine them with `cowplot::plot_grid()` or `patchwork`
+
+## Structure plot
+
+The **structure plot** shows posterior community membership probabilities for
+each sample as stacked bars — the classic "STRUCTURE" visualization familiar
+from population genetics.
+
+```{r structure_basic}
+# Basic structure plot (all samples, single panel)
+eDNA_dmm_structure(fit)
+```
+
+```{r structure_faceted}
+# Faceted by depth bin, sorted by latitude within each panel
+p_structure <- eDNA_dmm_structure(
+  fit,
+  metadata  = data$covariates,   # pass your metadata data frame
+  facet_var = "depth_bin",       # one panel per depth stratum
+  sort_var  = "latitude"         # sort samples by latitude within each panel
+)
+p_structure
+```
+
+The structure plot is best read by looking for **vertical patterns** (samples
+dominated by a single color) and **transitions** (where one community gives
+way to another along the sorting axis). When sorted by latitude and faceted by
+depth, you should see Community 1 dominating shallow-southern samples,
+Community 2 dominating deep-northern samples, and Community 3 appearing in
+intermediate positions.
+
+```{r structure_custom_colors}
+# Use custom community colors
+p_structure_custom <- eDNA_dmm_structure(
+  fit,
+  metadata         = data$covariates,
+  facet_var        = "depth_bin",
+  sort_var         = "latitude",
+  community_colors = c(
+    "Community 1" = "#E63946",
+    "Community 2" = "#457B9D",
+    "Community 3" = "#2A9D8F"
+  )
+)
+p_structure_custom
+```
+
+```{r structure_save}
+# Save at publication quality
+ggplot2::ggsave(
+  "structure_plot.png",
+  p_structure,
+  width  = 10,
+  height = 4,
+  dpi    = 300
+)
+```
+
+```{r structure_customize}
+# Further ggplot2 customization (e.g., change the strip text)
+library(ggplot2)
+p_structure +
+  theme(
+    strip.text = element_text(size = 14, face = "bold"),
+    plot.title = element_text(size = 16)
+  )
+```
+
+## NMDS ordination
+
+The **NMDS plot** shows community composition in ordination space. Points are
+colored by their MAP community assignment, and size reflects assignment
+certainty. Dashed ellipses encompass 95% of each community's points.
+
+```{r nmds}
+nmds_result <- eDNA_dmm_nmds(fit)
+
+# Print the plot
+nmds_result$plot
+
+# Check NMDS stress (< 0.10 is good; > 0.20 may need k=3 dimensions)
+message("NMDS stress: ", round(nmds_result$nmds$stress, 3))
+```
+
+Well-separated communities will appear as distinct point clusters. Overlapping
+clusters indicate that the communities are compositionally similar and/or that
+some samples are ambiguously assigned (which you will also see as smaller points,
+since size reflects certainty).
+
+```{r nmds_3d}
+# Fit a 3D NMDS for lower stress, then view NMDS1 vs NMDS3
+nmds_3d <- eDNA_dmm_nmds(fit, k = 3, nmds_axes = c(1, 3))
+nmds_3d$plot
+```
+
+```{r nmds_custom}
+# No ellipses, custom colors, Jaccard distance instead of Bray-Curtis
+eDNA_dmm_nmds(
+  fit,
+  distance         = "jaccard",
+  show_ellipse     = FALSE,
+  community_colors = c("Community 1" = "#E63946",
+                       "Community 2" = "#457B9D",
+                       "Community 3" = "#2A9D8F")
+)$plot
+```
+
+```{r nmds_save}
+ggplot2::ggsave(
+  "nmds.png",
+  nmds_result$plot,
+  width = 7,
+  height = 6,
+  dpi = 300
+)
+```
+
+## Beta coefficient plots
+
+The **beta plot** compares the posterior distribution of each softmax
+regression coefficient to its prior. When the posterior is pulled away from
+the prior, the data support that covariate's effect on community membership.
+
+```{r beta_joint}
+# Joint layout: communities overlaid per covariate
+beta_result <- eDNA_dmm_beta(fit)
+beta_result$plot
+```
+
+**Reading the beta plot:**
+
+- **Grey** = the prior: Normal(0, 1). This is what the model assumed before
+  seeing the data.
+- **Red/Blue** = the posterior for each community (relative to Community 3,
+  the reference).
+- If the colored peak is shifted clearly away from grey (and from zero), that
+  covariate has a genuine effect on community membership.
+- The annotation shows the posterior mean, 90% CI, and P(direction) — the
+  probability that the coefficient has the sign it appears to have.
+
+For the example data, you should see:
+- **Latitude**: Community 1 posterior negative (prefers southern sites),
+  Community 2 positive (prefers northern sites)
+- **Depth**: Community 1 negative (prefers shallow), Community 2 positive
+  (prefers deep)
+
+```{r beta_separate}
+# Separate layout: one row per community
+eDNA_dmm_beta(fit, layout = "separate")$plot
+```
+
+```{r beta_table}
+# Access the coefficient summary table
+beta_result$table
+# Columns: community, covariate, mean, ci_5, ci_95, prob_positive, prob_negative,
+#          ess, reliability
+```
+
+The **reliability** column classifies each coefficient based on its
+effective sample size (ESS):
+- `"trustworthy"`: ESS > 400 — use these with confidence
+- `"cautious"`: ESS 100–400 — treat as indicative, not definitive
+- `"unreliable"`: ESS < 100 — do not interpret; run longer chains
+
+```{r beta_save}
+ggplot2::ggsave(
+  "beta_coefficients.png",
+  beta_result$plot,
+  width  = 8,
+  height = 5,
+  dpi    = 300
+)
+```
+
+---
+
+# Combining plots with cowplot and patchwork
+
+The ggplot2 objects returned by all three visualization functions can be
+combined freely. Here is an example using `cowplot`:
+
+```{r cowplot, eval=FALSE}
+install.packages("cowplot")
+library(cowplot)
+
+p1 <- eDNA_dmm_structure(fit, metadata = data$covariates,
+                          facet_var = "depth_bin", sort_var = "latitude")
+p2 <- eDNA_dmm_nmds(fit)$plot
+p3 <- eDNA_dmm_beta(fit)$plot
+
+combined <- cowplot::plot_grid(
+  p2, p3,
+  ncol   = 2,
+  labels = c("A", "B"),
+  label_size = 16
+)
+combined_full <- cowplot::plot_grid(
+  p1, combined,
+  ncol        = 1,
+  rel_heights = c(1, 1.4),
+  labels      = c("C", ""),
+  label_size  = 16
+)
+cowplot::ggsave2("figure_1.png", combined_full, width = 14, height = 10, dpi = 300)
+```
+
+And with `patchwork` (another popular option):
+
+```{r patchwork, eval=FALSE}
+install.packages("patchwork")
+library(patchwork)
+
+(p2 | p3) / p1 +
+  patchwork::plot_annotation(tag_levels = "A")
+```
+
+---
+
+# Advanced topics
+
+## Accessing the raw Stan fit
+
+For diagnostics beyond what `summary()` provides, the raw
+`rstan::stanfit` object is available in `fit$stan_fit`:
+
+```{r stan_raw}
+library(rstan)
+
+# Full parameter summary
+print(fit$stan_fit, pars = c("alpha", "pi[1,1]", "pi[2,1]", "beta[1,1]"))
+
+# Traceplots
+traceplot(fit$stan_fit, pars = "alpha")
+
+# Pairs plot (joint posterior for a few parameters)
+pairs(fit$stan_fit, pars = c("alpha", "beta[1,1]", "beta[1,2]"))
+```
+
+## Fixing alpha (known overdispersion)
+
+If you have estimated the overdispersion parameter from a prior study or
+pilot dataset, you can fix it by editing the Stan model to use the
+"Option B" variant (see comments in `inst/stan/dmm.stan`). This reduces
+the number of parameters and can improve convergence.
+
+## Increasing iterations for better ESS
+
+If `summary()` reports low ESS for some parameters:
+
+```{r more_iter}
+fit_long <- eDNA_dmm(
+  counts     = data$counts,
+  covariates = covariate_matrix,
+  K          = 3,
+  iter       = 10000,    # 10,000 total
+  warmup     = 5000      # 5,000 warmup
+)
+```
+
+## Silent fitting in loops
+
+When fitting multiple K values manually, suppress output:
+
+```{r silent}
+results <- lapply(2:5, function(k) {
+  eDNA_dmm(data$counts, covariate_matrix, K = k, verbose = FALSE)
+})
+names(results) <- paste0("K", 2:5)
+```
+
+---
+
+# Troubleshooting
+
+## "Divergent transitions" in diagnostics
+
+Divergent transitions indicate that the sampler is having trouble exploring
+the posterior geometry. Try:
+
+1. Increase `adapt_delta` toward 0.99: `eDNA_dmm(..., adapt_delta = 0.99)`
+2. Increase `max_treedepth` to 14 or 15
+3. Reduce K — more communities require more complex geometry
+4. Check that all-zero taxa have been removed from your count matrix
+
+## Very low ESS for beta parameters
+
+Low beta ESS often means the covariate has little effect and the posterior
+is flat. This is not necessarily a problem — it means the data do not support
+that covariate driving community structure. Check the beta plot: if the
+posterior looks nearly identical to the prior, the data are uninformative
+about that effect.
+
+## "Only X stations pass min_station_reads" warning
+
+This is not from `eDNA_dmm()` itself but from `validate_counts()`. Samples
+with fewer than 100 total reads receive this warning. Remove low-coverage
+samples: `counts <- counts[rowSums(counts) >= 1000, ]`
+
+## Compilation takes a long time
+
+Stan compiles the model to C++ code the first time. This takes 30–120 seconds
+but only happens once. On subsequent calls, rstan uses the cached compiled
+model (set `rstan_options(auto_write = TRUE)` to ensure caching).
+
+## "object 'example_edna' not found"
+
+Run `library(eDNA_structure)` first. The dataset is lazily loaded and becomes
+available only after loading the package.
+
+---
+
+# Citation
+
+If you use `eDNA_structure` in published research, please cite:
+
+> [Author name(s)] (year). eDNA_structure: Dirichlet-Multinomial Mixture
+> Models for eDNA Metabarcoding Community Structure. R package version 0.1.0.
+> https://github.com/yourusername/eDNA_structure
+
+Please also cite the Stan software:
+
+> Carpenter B., Gelman A., Hoffman M., Lee D., Goodrich B., Betancourt M.,
+> Brubaker M., Guo J., Li P., and Riddell A. (2017). Stan: A probabilistic
+> programming language. *Journal of Statistical Software*, 76(1).
+
+---
+
+# Session information
+
+```{r session}
+sessionInfo()
+```
