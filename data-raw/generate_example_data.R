@@ -3,7 +3,7 @@
 # Run once from the package root: source("data-raw/generate_example_data.R")
 # =============================================================================
 
-devtools::load_all()
+devtools::load_all("~/UW/eDNA_structure")
 
 set.seed(2026)
 
@@ -43,5 +43,5 @@ example_edna <- simulate_eDNA_survey(
 cat("Count matrix:", paste(dim(example_edna$counts), collapse = " x "), "\n")
 cat("Read depth range:", paste(range(rowSums(example_edna$counts)), collapse = "-"), "\n")
 
-usethis::use_data(example_edna, overwrite = TRUE, compress = "xz")
+save(example_edna, file = "~/UW/eDNA_structure/data/example_edna.rda", compress = "xz")
 message("Saved: data/example_edna.rda")
