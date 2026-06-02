@@ -1,4 +1,4 @@
-Package: eDNA_structure
+Package: eDNAstructure
 Title: Dirichlet-Multinomial Mixture Models for eDNA Metabarcoding Community Structure
 Version: 0.1.0
 Authors@R: 
@@ -36,5 +36,5 @@ Config/testthat/edition: 3
 VignetteBuilder: knitr
 LazyData: true
 SystemRequirements: C++ (>= 14), rstan (see https://mc-stan.org/rstan/)
-URL: https://github.com/yourusername/eDNA_structure
-BugReports: https://github.com/yourusername/eDNA_structure/issues
+URL: https://github.com/pedrobdfp/eDNA_structure
+BugReports: https://github.com/pedrobdfp/eDNA_structure/issues
