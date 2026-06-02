@@ -260,7 +260,7 @@ eDNA_dmm <- function(
       c(
         "Cannot find the bundled Stan model file.",
         i = "This usually means the package was not installed correctly.",
-        i = "Try reinstalling: `remotes::install_github("pedrobdfp/eDNA_structure")`"
+        i = "Try reinstalling: `remotes::install_github(`pedrobdfp/eDNA_structure`)`"
       )
     )
   }
