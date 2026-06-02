@@ -1,4 +1,4 @@
-# eDNA_structure
+# eDNAstructure
 
 **Dirichlet-Multinomial Mixture Models for eDNA Metabarcoding Community Structure**
 
@@ -13,7 +13,7 @@ temperature, etc.) predict community membership.
 ## What it does
 
 Given a **sample × taxon read count matrix** and optional environmental
-covariates, `eDNA_structure`:
+covariates, `eDNAstructure`:
 
 1. Fits a **Dirichlet-Multinomial Mixture (DMM) model** using Bayesian
    inference (Stan under the hood)
@@ -29,7 +29,7 @@ covariates, `eDNA_structure`:
 
 ### Prerequisites
 
-`eDNA_structure` requires R ≥ 4.1.0 and a working Stan/rstan installation.
+`eDNAstructure` requires R ≥ 4.1.0 and a working Stan/rstan installation.
 If you have not installed rstan before, follow these steps first:
 
 **1. Install a C++ toolchain:**
@@ -80,7 +80,7 @@ Installed automatically with the package:
 ## Quick start
 
 ```r
-library(eDNA_structure)
+library(eDNAstructure)
 
 # Load the built-in example dataset
 data <- get_example_data()
@@ -340,7 +340,7 @@ If you use this package in published research, please cite:
 > Brandão-Dias et al. (year). Multinomial mixture models from environmental DNA reveal 
 > depth stability and dynamic surface turnover of marine vertebrate communities. Under review
  
-> Brandão-Dias et al. (year). eDNA_structure: Dirichlet-Multinomial Mixture Models for
+> Brandão-Dias et al. (year). eDNAstructure: Dirichlet-Multinomial Mixture Models for
 > eDNA Metabarcoding Community Structure. R package version 0.1.0.
 > https://github.com/pedrobdfp/eDNA_structure
 
@@ -353,4 +353,4 @@ Please also cite Stan:
 
 ## License
 
-MIT © eDNA_structure authors
+MIT © eDNAstructure authors

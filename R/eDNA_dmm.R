@@ -23,7 +23,7 @@
 #' labels.
 #'
 #' `covariates` should be a **sample × covariate** matrix or data frame. It
-#' must have the same number of rows as `counts`, in the same order. Covariates
+#' must have the same number of rows as `counts`, *in the same order*. Covariates
 #' are Z-score standardized internally by default (`scale_covariates = TRUE`),
 #' which is strongly recommended for interpretable beta coefficients and good
 #' MCMC mixing. Pass `NULL` to fit an intercept-only model.
@@ -254,13 +254,13 @@ eDNA_dmm <- function(
   )
 
   # ── Locate bundled Stan model ─────────────────────────────────────────────────
-  stan_file <- system.file("stan", "dmm.stan", package = "eDNA_structure")
+  stan_file <- system.file("stan", "dmm.stan", package = "eDNAstructure")
   if (!nzchar(stan_file)) {
     rlang::abort(
       c(
         "Cannot find the bundled Stan model file.",
         i = "This usually means the package was not installed correctly.",
-        i = "Try reinstalling: `install.packages('eDNA_structure')`"
+        i = "Try reinstalling: `remotes::install_github("pedrobdfp/eDNA_structure")`"
       )
     )
   }

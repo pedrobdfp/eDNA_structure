@@ -1,1 +1,1 @@
-library(eDNA_structure)
+library(eDNAstructure)

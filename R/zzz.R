@@ -1,7 +1,7 @@
-#' eDNA_structure: Dirichlet-Multinomial Mixture Models for eDNA Metabarcoding
+#' eDNAstructure: Dirichlet-Multinomial Mixture Models for eDNA Metabarcoding
 #'
 #' @description
-#' `eDNA_structure` fits Bayesian Dirichlet-Multinomial Mixture (DMM) models
+#' `eDNAstructure` fits Bayesian Dirichlet-Multinomial Mixture (DMM) models
 #' to eDNA read count data from metabarcoding surveys. The model simultaneously
 #' estimates:
 #'
@@ -35,8 +35,8 @@
 #' objects that can be freely customized downstream.
 #'
 #' @docType package
-#' @name eDNA_structure-package
-#' @aliases eDNA_structure
+#' @name eDNAstructure-package
+#' @aliases eDNAstructure
 "_PACKAGE"
 
 #' @importFrom rstan stan extract as.matrix.stanfit

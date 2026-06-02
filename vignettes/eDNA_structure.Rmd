@@ -1,5 +1,5 @@
 ---
-title: "Getting Started with eDNA_structure"
+title: "Getting Started with eDNAstructure"
 subtitle: "Fitting Dirichlet-Multinomial Mixture Models to eDNA Metabarcoding Data"
 output:
   rmarkdown::html_vignette:
@@ -24,7 +24,7 @@ knitr::opts_chunk$set(
 
 # Introduction
 
-`eDNA_structure` fits **Dirichlet-Multinomial Mixture (DMM) models** to
+`eDNAstructure` fits **Dirichlet-Multinomial Mixture (DMM) models** to
 environmental DNA (eDNA) read count data from metabarcoding surveys. The
 central question the model answers is:
 
@@ -58,9 +58,9 @@ for R: <https://posit.co/download/rstudio-desktop/>.
 
 ## Step 2 — Install Stan and rstan
 
-`eDNA_structure` uses the Stan probabilistic programming language for Bayesian
+`eDNAstructure` uses the Stan probabilistic programming language for Bayesian
 inference. Stan has its own installation requirements beyond a standard R
-package. Follow the official instructions carefully:
+package (and it is usually very annoying). Follow the official instructions carefully:
 
 **<https://mc-stan.org/rstan/articles/rstan.html>**
 
@@ -84,7 +84,7 @@ The key steps are:
    If this runs without errors and produces output like `"SAMPLING FOR MODEL..."`,
    Stan is working correctly.
 
-## Step 3 — Install eDNA_structure
+## Step 3 — Install eDNAstructure
 
 Install directly from GitHub using the `remotes` package:
 
@@ -92,8 +92,8 @@ Install directly from GitHub using the `remotes` package:
 # Install remotes if you don't have it
 install.packages("remotes")
 
-# Install eDNA_structure
-remotes::install_github("yourusername/eDNA_structure")
+# Install eDNAstructure
+remotes::install_github("pedrobdfp/eDNA_structure")
 ```
 
 This will also install the required R package dependencies automatically:
@@ -102,7 +102,7 @@ This will also install the required R package dependencies automatically:
 ## Step 4 — Load the package
 
 ```{r load}
-library(eDNA_structure)
+library(eDNAstructure)
 ```
 
 ---
@@ -723,24 +723,27 @@ model (set `rstan_options(auto_write = TRUE)` to ensure caching).
 
 ## "object 'example_edna' not found"
 
-Run `library(eDNA_structure)` first. The dataset is lazily loaded and becomes
+Run `library(eDNAstructure)` first. The dataset is lazily loaded and becomes
 available only after loading the package.
 
 ---
 
 # Citation
 
-If you use `eDNA_structure` in published research, please cite:
+If you use `eDNAstructure` in published research, please cite:
 
-> [Author name(s)] (year). eDNA_structure: Dirichlet-Multinomial Mixture
-> Models for eDNA Metabarcoding Community Structure. R package version 0.1.0.
-> https://github.com/yourusername/eDNA_structure
 
-Please also cite the Stan software:
+> Brandão-Dias et al. (year). Multinomial mixture models from environmental DNA reveal 
+> depth stability and dynamic surface turnover of marine vertebrate communities. Under review
+ 
+> Brandão-Dias et al. (year). eDNAstructure: Dirichlet-Multinomial Mixture Models for
+> eDNA Metabarcoding Community Structure. R package version 0.1.0.
+> https://github.com/pedrobdfp/eDNA_structure
 
-> Carpenter B., Gelman A., Hoffman M., Lee D., Goodrich B., Betancourt M.,
-> Brubaker M., Guo J., Li P., and Riddell A. (2017). Stan: A probabilistic
-> programming language. *Journal of Statistical Software*, 76(1).
+Please also cite Stan:
+
+> Carpenter B. et al. (2017). Stan: A probabilistic programming language.
+> *Journal of Statistical Software*, 76(1).
 
 ---
 
