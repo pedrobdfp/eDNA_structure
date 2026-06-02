@@ -63,7 +63,7 @@
 #'   line in the Stan model. The default Stan model uses `normal(0, 1.0)`. If
 #'   you have changed the prior (e.g., to `normal(0, 2.5)`), update this argument.
 #' @param n_prior_samples A positive integer: the number of draws from the
-#'   prior distribution to use for the prior density. Default is `4000`.
+#'   prior distribution to use for the prior density. Default is `20000`.
 #'   Higher values give smoother prior curves but make no difference to the
 #'   posterior.
 #' @param community_colors A named character vector mapping community names
@@ -117,12 +117,12 @@ eDNA_dmm_beta <- function(
     covariates_to_plot  = NULL,
     show_intercept      = FALSE,
     beta_prior_sd       = 1.0,
-    n_prior_samples     = 4000,
+    n_prior_samples     = 20000,
     community_colors    = NULL,
     prior_color         = "grey60",
     prior_alpha         = 0.35,
     posterior_alpha     = 0.55,
-    show_annotations    = TRUE,
+    show_annotations    = NULL,
     base_size           = 13,
     title               = NULL,
     subtitle            = NULL
@@ -150,6 +150,11 @@ eDNA_dmm_beta <- function(
   }
 
   # ── Pull raw beta draws ───────────────────────────────────────────────────────
+  # Auto-annotate only when K=2 (one community, no overlap)
+  if (is.null(show_annotations)) {
+    show_annotations <- (K == 2)
+  }
+  
   beta_mat    <- as.matrix(fit$stan_fit, pars = "beta")
   n_post      <- fit$stan_data$K   # wrong — use actual chain length
   # Recover n_post from the stan fit

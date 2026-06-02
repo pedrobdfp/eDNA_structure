@@ -2,7 +2,7 @@
 
 **Dirichlet-Multinomial Mixture Models for eDNA Metabarcoding Community Structure**
 
-`eDNA_structure` is an R package for fitting Bayesian mixture models to
+`eDNAstructure` is an R package for fitting Bayesian mixture models to
 environmental DNA (eDNA) read count data. The model identifies latent
 ecological communities in your metabarcoding data, estimates their taxonomic
 compositions, and quantifies how environmental variables (depth, latitude,
@@ -51,13 +51,13 @@ If you see sampling output without errors, Stan is ready.
 
 Full rstan installation guide: <https://mc-stan.org/rstan/articles/rstan.html>
 
-### Install eDNA_structure
+### Install eDNAstructure
 
 ```r
 # Install the remotes package if needed
 install.packages("remotes")
 
-# Install eDNA_structure from GitHub
+# Install eDNAstructure from GitHub
 remotes::install_github("pedrobdfp/eDNA_structure")
 ```
 
@@ -82,34 +82,57 @@ Installed automatically with the package:
 ```r
 library(eDNAstructure)
 
-# Load the built-in example dataset
+# Option A — use the built-in example dataset
 data <- get_example_data()
 
-# Fit a K=3 DMM with depth and latitude as covariates
-fit <- eDNA_dmm(
-  counts     = data$counts,
-  covariates = data$covariates[, c("latitude", "depth")],
-  K          = 3
+# Option B — simulate your own dataset with known ground truth
+data <- simulate_eDNA_survey(
+  n_communities         = 4,
+  n_species             = 40,
+  samples_per_community = 5,
+  seed                  = 2026
 )
 
-# Print a summary
+# Inspect raw species composition before fitting
+plot_true_compositions(
+  data$counts,
+  metadata  = data$covariates,
+  facet_var = "TrueCommunity"
+)
+
+# Select K using LOO cross-validation
+loo_result <- eDNA_loo(data$counts, data$covariates[, c("Depth", "Distance_shore")],
+                       K_range = 2:5)
+loo_result$plot
+
+# Fit the model
+fit <- eDNA_dmm(
+  counts     = data$counts,
+  covariates = data$covariates[, c("Depth", "Distance_shore")],
+  K          = 4
+)
+
 print(fit)
 summary(fit)
 
-# Structure plot
+# Structure plot — faceted by true community, sorted by depth
 eDNA_dmm_structure(
   fit,
   metadata  = data$covariates,
-  facet_var = "depth_bin",
-  sort_var  = "latitude"
+  facet_var = "TrueCommunity",
+  sort_var  = "Depth"
 )
 
-# NMDS ordination
+# NMDS ordination colored by community assignment
 eDNA_dmm_nmds(fit)$plot
 
-# Covariate effects (prior vs posterior)
+# Prior vs posterior for covariate effects
 eDNA_dmm_beta(fit)$plot
 ```
+
+For a complete walkthrough including simulation, K selection, all visualization
+options, and parameter recovery, see the
+[full tutorial vignette](vignettes/tutorial.Rmd).
 
 ---
 
@@ -126,10 +149,10 @@ Your primary input should be a **sample × taxon count matrix**:
 ```r
 # Example: what the count matrix looks like
 head(data$counts[, 1:4])
-#          Engraulis mordax  Sardinops sagax  Merluccius productus  Sebastes entomelas
-# STN_001              412              310                   121                  73
-# STN_002              389              275                    98                  61
-# STN_003               52               41                   487                 312
+#          Sp_1  Sp_2  Sp_3  Sp_4
+# STN_001   412   310   121    73
+# STN_002   389   275    98    61
+# STN_003    52    41   487   312
 ```
 
 If your data are in long format (sample, taxon, count columns), convert them:
@@ -146,14 +169,32 @@ count_matrix <- long_df |>
 
 ```r
 head(data$covariates)
-#   sample_id  latitude  depth  year  depth_bin
-# 1   STN_001     39.10     50  2019    shallow
-# 2   STN_002     39.22     50  2021    shallow
-# 3   STN_003     39.34    150  2023       deep
+#   sample_id  TrueCommunity  Depth  Distance_shore
+# 1   STN_001              1     82             198
+# 2   STN_002              1     79             204
+# 3   STN_003              2     11             197
 ```
 
 Covariates are Z-score standardized internally by default.
 The covariate data frame must be in the same row order as the count matrix.
+
+---
+
+## Simulation pipeline
+
+`eDNAstructure` includes a full mechanistic eDNA simulation pipeline so you
+can generate datasets with known community structure for method validation
+and teaching.
+
+| Function | Purpose |
+|----------|---------|
+| `generate_community_compositions()` | K community frequency vectors over S species |
+| `generate_contributors()` | Organisms contributing eDNA per sample |
+| `generate_eDNA()` | Shedding, decay, and bottle sub-sampling |
+| `simulate_metabarcoding()` | Amplification bias and multinomial read counts |
+| `generate_sample_covariates()` | Environmental metadata per sample |
+| `simulate_eDNA_survey()` | Full pipeline in one call |
+| `plot_true_compositions()` | Stacked bar plot of observed species frequencies |
 
 ---
 
@@ -193,8 +234,8 @@ p <- eDNA_dmm_structure(
   fit,
   metadata         = my_metadata,   # data frame with extra sample variables
   sample_id_col    = "sample_id",   # column in metadata matching fit sample IDs
-  facet_var        = "year",        # create panels by this variable
-  sort_var         = "latitude",    # sort samples within panels
+  facet_var        = "TrueCommunity", # create panels by this variable
+  sort_var         = "Depth",       # sort samples within panels
   community_colors = NULL,          # auto-generated; or named hex vector
   bar_width        = 0.9,           # width of each sample bar (0–1)
   x_text           = FALSE,         # show sample labels on x-axis?
@@ -247,7 +288,7 @@ result <- eDNA_dmm_beta(
   prior_color        = "grey60",    # fill color for prior density
   prior_alpha        = 0.35,        # transparency of prior density
   posterior_alpha    = 0.55,        # transparency of posterior density
-  show_annotations   = TRUE,        # annotate panels with mean, CI, P(direction)
+  show_annotations   = NULL,        # TRUE/FALSE/NULL (NULL = auto: only shown for K=2)
   base_size          = 13,          # base font size
   title              = NULL,        # custom title
   subtitle           = NULL         # custom subtitle
@@ -278,9 +319,9 @@ loo_result$fits        # list of edna_dmm_fit objects, one per K
 
 ```r
 data <- get_example_data()
-# data$counts      — 60 × 25 count matrix
-# data$covariates  — data frame: sample_id, latitude, depth, year, depth_bin
-# data$true_params — true generating parameters (K=3, pi, gamma)
+# data$counts                — 20 × 40 count matrix
+# data$covariates            — data frame: sample_id, TrueCommunity, Depth, Distance_shore
+# data$community_compositions — true 4 × 40 composition matrix
 ```
 
 ---
@@ -337,9 +378,9 @@ assignment on year).
 
 If you use this package in published research, please cite:
 
-> Brandão-Dias et al. (year). Multinomial mixture models from environmental DNA reveal 
-> depth stability and dynamic surface turnover of marine vertebrate communities. Under review
- 
+> Brandão-Dias et al. (year). Multinomial mixture models from environmental DNA reveal
+> depth stability and dynamic surface turnover of marine vertebrate communities. Under review.
+
 > Brandão-Dias et al. (year). eDNAstructure: Dirichlet-Multinomial Mixture Models for
 > eDNA Metabarcoding Community Structure. R package version 0.1.0.
 > https://github.com/pedrobdfp/eDNA_structure

@@ -1,0 +1,735 @@
+---
+title: "eDNA_structure: Full Tutorial"
+subtitle: "From Simulation to Fitted Communities — A Complete Walkthrough"
+output:
+  rmarkdown::html_vignette:
+    toc: true
+    toc_depth: 4
+    number_sections: true
+vignette: >
+  %\VignetteIndexEntry{eDNA_structure: Full Tutorial}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  collapse   = TRUE,
+  comment    = "#>",
+  eval       = FALSE,
+  fig.width  = 8,
+  fig.height = 5,
+  message    = FALSE,
+  warning    = FALSE
+)
+```
+
+```{r load}
+library(eDNAstructure)
+library(ggplot2)   # for post-hoc plot customization
+```
+
+---
+
+# Overview
+
+This tutorial walks through the complete `eDNAstructure` workflow:
+
+1. **Simulate** a realistic eDNA survey with known ground truth
+2. **Inspect** the raw community signal before fitting
+3. **Format** data correctly for `eDNA_dmm()`
+4. **Select K** using LOO cross-validation
+5. **Fit** the Dirichlet-Multinomial Mixture model
+6. **Visualize** community assignments, NMDS ordination, and covariate effects
+7. **Verify** recovery of true parameters
+
+For a shorter introduction, see `vignette("eDNA_structure")`.
+
+---
+
+# The simulation pipeline
+
+`eDNAstructure` includes a full mechanistic simulation pipeline so you can
+generate datasets with known community structure and verify that the model
+recovers it. The same pipeline was used to generate the built-in example
+dataset (`get_example_data()`).
+
+## Why simulate?
+
+- **Controlled validation**: you know the true K, true compositions, and true
+  covariate effects — so you can check that the model gives the right answers
+- **Power analysis**: how many samples do you need? What spillover level is too
+  high for the model to separate communities?
+- **Method development**: test changes to the Stan model on known-truth data
+  before applying to real surveys
+
+## The five simulation steps
+
+The pipeline runs five sequential steps. You can call them individually for
+full control, or use `simulate_eDNA_survey()` to run all five at once.
+
+### Step 1 — Community compositions
+
+`generate_community_compositions()` builds a K × S matrix where each row is
+one community's species frequency vector.
+
+```{r sim_compositions}
+# Four communities, 40 species
+# Communities 1+3 share a group (deep habitat); communities 2+4 share a group (surface)
+community_mat <- generate_community_compositions(
+  n_communities         = 4,
+  n_species             = 40,
+  n_dominant_range      = c(2, 3),   # 2-3 dominant species per community
+  n_unique_low_freq     = 4,         # 4 species unique to each community
+  community_groups      = c(1, 2, 1, 2),  # depth groups
+  n_group_shared        = 4,         # 4 species shared within each depth group
+  group_shared_presence = 1.0,
+  dominant_freq         = c(0.08, 0.14),
+  low_unique_freq       = c(0.02, 0.04),
+  group_shared_freq     = c(0.02, 0.04),
+  shared_freq           = c(0.02, 0.04),
+  shared_presence       = 0,         # no globally shared species
+  spillover             = 0.15,      # 15% of a species' frequency leaks to other communities
+  seed                  = 2026
+)
+
+dim(community_mat)    # 4 x 40
+round(rowSums(community_mat), 6)   # each row sums to 1
+```
+
+The `spillover` parameter is key: `0` gives perfectly exclusive communities
+(each species present in exactly one community); `0.15` gives realistic partial
+overlap. Higher values make communities harder to distinguish.
+
+### Step 2 — Contributors (organisms)
+
+`generate_contributors()` assigns individual organisms to each sample, drawing
+species from the community frequency vector.
+
+```{r sim_contributors}
+contrib_obj <- generate_contributors(
+  community_compositions = community_mat,
+  samples_per_community  = 5,          # 5 sampling stations per community = 20 total
+  n_contributors_range   = c(20, 100), # 20-100 organisms per sample
+  n_distribution         = "Negative Binomial",  # overdispersed, more realistic
+  size_range             = c(1, 10),   # body size range (affects eDNA shedding)
+  distance_range         = c(0, 100),  # distance from sampler (affects eDNA decay)
+  seed                   = 2026
+)
+
+length(contrib_obj$contributors_list)  # 20 samples
+head(contrib_obj$contributors_list[[1]])
+```
+
+### Step 3 — eDNA shedding and sub-sampling
+
+`generate_eDNA()` models how eDNA molecules move from organisms into the water
+column and are captured by a sampling bottle.
+
+```{r sim_edna}
+eDNA_obj <- generate_eDNA(
+  contributors_list = contrib_obj$contributors_list,
+  shedding_rate     = 1000,    # baseline molecules shed per unit size
+  beta              = 0.75,    # allometric exponent (metabolic scaling)
+  decay_rate        = 0.1,     # exponential distance decay
+  shedding_error    = 0.3,     # lognormal noise on shedding (SD on log scale)
+  bottle_volume     = 0.1,     # fraction of local pool captured
+  bio_reps          = 1        # one bottle per station
+)
+
+head(eDNA_obj$Summary)
+```
+
+### Step 4 — Metabarcoding
+
+`simulate_metabarcoding()` applies amplification bias and sequencing noise to
+produce final integer read counts.
+
+```{r sim_metab}
+metab_df <- simulate_metabarcoding(
+  eDNA_obj,
+  mean_read_depth = 10000,    # mean reads per sample
+  read_depth_sd   = 0.2,      # lognormal SD for read depth variation
+  error_sd        = 0.05,     # Gaussian noise on species frequencies
+  rep             = 1         # one sequencing replicate per bottle
+)
+
+str(metab_df)
+```
+
+### Step 5 — Environmental covariates
+
+`generate_sample_covariates()` assigns realistic covariate values to each sample
+drawn from community-specific distributions.
+
+```{r sim_covariates}
+# Define where each community lives in covariate space
+community_covariate_means <- matrix(
+  c(80, 200,   # Community 1: deep + offshore
+    10, 200,   # Community 2: surface + offshore
+    80,  20,   # Community 3: deep + inshore
+    10,  20),  # Community 4: surface + inshore
+  nrow = 4, byrow = TRUE,
+  dimnames = list(NULL, c("Depth", "Distance_shore"))
+)
+
+sample_metadata <- generate_sample_covariates(
+  contributors_list    = contrib_obj$contributors_list,
+  community_covariates = community_covariate_means,
+  covariate_sds        = NULL   # default SD = 5 for all
+)
+
+head(sample_metadata)
+```
+
+## Running the full pipeline at once
+
+For most uses, `simulate_eDNA_survey()` runs all five steps in one call and
+returns a count matrix and covariate data frame ready for `eDNA_dmm()`.
+
+```{r sim_full}
+sim <- simulate_eDNA_survey(
+  n_communities             = 4,
+  n_species                 = 40,
+  samples_per_community     = 5,
+  community_covariate_means = community_covariate_means,
+  mean_read_depth           = 10000,
+  spillover                 = 0.15,
+  shedding_error            = 0.3,
+  seed                      = 2026
+)
+
+# Ready-to-use outputs
+dim(sim$counts)        # 20 samples x 40 taxa
+head(sim$covariates)   # sample_id, TrueCommunity, Depth, Distance_shore
+```
+
+---
+
+# Data format
+
+Before fitting, make sure your data are in the right format. This section
+explains the required format using the simulated data as an example.
+
+## The count matrix
+
+The count matrix is the primary input to `eDNA_dmm()`.
+
+```{r data_format_counts}
+# Rows = samples, columns = taxa, values = integer read counts
+sim$counts[1:4, 1:6]
+
+# Each row should have a meaningful total — check
+range(rowSums(sim$counts))
+hist(rowSums(sim$counts), main = "Read depth distribution", xlab = "Total reads")
+
+# Zero-count columns are dropped automatically with a warning
+# but it's good practice to remove them yourself
+counts <- sim$counts[, colSums(sim$counts) > 0]
+dim(counts)
+```
+
+**Key rules:**
+- All values must be non-negative integers (or coercible to integers)
+- No NA values (replace with 0 if a taxon was simply absent)
+- No all-zero rows (remove samples with zero total reads)
+- Row names are used as sample IDs in plots — set them meaningfully
+
+## The covariate data frame
+
+```{r data_format_covs}
+# Same row order as counts — this is critical
+head(sim$covariates)
+
+# Verify alignment
+stopifnot(all(rownames(counts) == sim$covariates$sample_id))
+
+# Select only the covariates you want to model
+cov_matrix <- sim$covariates[, c("Depth", "Distance_shore")]
+head(cov_matrix)
+```
+
+Covariates are Z-score standardized internally when `scale_covariates = TRUE`
+(the default). Do not pre-standardize — let the function handle it so
+beta coefficients remain on a common scale.
+
+## Converting long-format data
+
+If your count data are in long format (one row per sample-taxon):
+
+```{r long_to_wide, eval=FALSE}
+library(tidyr)
+
+count_matrix <- long_df |>
+  pivot_wider(
+    names_from  = taxon_col,
+    values_from = count_col,
+    values_fill = 0L
+  ) |>
+  tibble::column_to_rownames("sample_id_col") |>
+  as.matrix()
+```
+
+---
+
+# Visualizing raw compositions (before fitting)
+
+Before running the model, it is useful to visualize the raw species composition
+of each sample. `plot_true_compositions()` produces a stacked bar plot in the
+same format as the structure plot, making it easy to compare the two side by side.
+
+```{r plot_raw}
+# All samples, no faceting
+plot_true_compositions(counts)
+```
+
+```{r plot_raw_faceted}
+# Faceted by true community — this is only possible with simulated data where
+# the true community labels are known. With real data, facet by a known
+# grouping variable like depth stratum or site.
+plot_true_compositions(
+  counts,
+  metadata  = sim$covariates,
+  facet_var = "TrueCommunity",
+  sort_var  = "Depth",
+  top_n     = 20
+)
+```
+
+You should see that samples from the same true community have similar species
+composition, and that compositions differ between communities. If you cannot see
+any structure at all, the communities may be too similar (too much spillover)
+for the model to separate them.
+
+```{r plot_raw_save}
+p_raw <- plot_true_compositions(
+  counts,
+  metadata  = sim$covariates,
+  facet_var = "TrueCommunity"
+)
+ggsave("raw_compositions.png", p_raw, width = 10, height = 4, dpi = 300)
+```
+
+---
+
+# Selecting K: how many communities?
+
+Rarely do you know K in advance. The standard approach is to fit models for
+K = 2, 3, 4, 5 and compare them using Leave-One-Out cross-validation (LOO-CV).
+
+`eDNA_loo()` does this automatically. It takes a few minutes per K value.
+
+```{r loo, cache=TRUE}
+loo_result <- eDNA_loo(
+  counts     = counts,
+  covariates = cov_matrix,
+  K_range    = 2:5,
+  iter       = 4000,
+  warmup     = 2000,
+  seed       = 13
+)
+```
+
+```{r loo_plot}
+# Elbow plot — look for the K where gains flatten
+loo_result$plot
+```
+
+```{r loo_table}
+# Numeric table of LOO-ELPD ± SE
+loo_result$loo_table
+```
+
+```
+  K       elpd       se
+1 2 -8431.22  64.1
+2 3 -8219.56  61.8
+3 4 -8188.44  60.2   ← gain flattens here
+4 5 -8191.03  61.5
+```
+
+**How to read this:**
+
+- Higher LOO-ELPD = better predictive performance
+- The gain from K=3 to K=4 should be large (the true K); from K=4 to K=5
+  it should be small (diminishing returns)
+- If two adjacent models are within ~2 SE of each other, prefer the simpler one
+
+For data generated with K=4, the elbow should appear at K=4.
+
+---
+
+# Fitting the model
+
+## Basic fit
+
+```{r fit, cache=TRUE}
+fit <- eDNA_dmm(
+  counts     = counts,
+  covariates = cov_matrix,
+  K          = 4
+)
+```
+
+When you run this, Stan prints sampling progress to the console. This is normal.
+The first run compiles the Stan model (1–2 minutes), after which subsequent runs
+skip straight to sampling.
+
+## Reading the output
+
+```{r fit_print}
+print(fit)
+```
+
+```
+eDNA Dirichlet-Multinomial Mixture Model
+=========================================
+  K (communities)  : 4
+  N (samples)      : 20
+  S (taxa)         : 40
+  Covariates       : Depth, Distance_shore
+  Mean alpha       : 3.14
+
+Community sizes (MAP assignment):
+  Community 1     : 5 samples (25.0%)
+  Community 2     : 5 samples (25.0%)
+  Community 3     : 5 samples (25.0%)
+  Community 4     : 5 samples (25.0%)
+```
+
+```{r fit_summary}
+summary(fit)
+```
+
+`summary()` reports:
+
+- **Alpha**: overdispersion. Typical eDNA values are 1–5. Our simulated data
+  used alpha = 3, so the model should recover something close to that.
+- **Assignment certainty**: fraction of samples with ≥80% posterior probability
+  of belonging to one community. High certainty = well-separated communities.
+- **Beta coefficients**: effect of depth and distance from shore on community
+  membership. Reliability is `"trustworthy"` when ESS > 400.
+- **HMC diagnostics**: look for zero divergences and no max treedepth warnings.
+
+## Accessing model components
+
+```{r fit_components}
+# Posterior membership probabilities (one row per sample)
+head(fit$sample_info)
+# Columns: sample_id, prob_comm1, prob_comm2, prob_comm3, prob_comm4,
+#          z_hat (MAP assignment), assignment_certainty
+
+# Posterior mean compositions (K x S)
+round(fit$pi_mean[, 1:8], 3)
+
+# Beta coefficient table
+fit$beta_summary
+
+# Posterior mean overdispersion
+fit$alpha_mean   # should be close to 3.0 (the simulated truth)
+```
+
+---
+
+# Visualization
+
+All three visualization functions return `ggplot2` objects. You can print them,
+save them with `ggsave()`, or modify them with additional ggplot2 layers.
+
+## Structure plot
+
+```{r struct_basic}
+# Basic: all samples, single panel
+eDNA_dmm_structure(fit)
+```
+
+```{r struct_faceted}
+# Faceted by true community, sorted by depth
+# This lets you directly compare model assignments to the ground truth
+p_struct <- eDNA_dmm_structure(
+  fit,
+  metadata  = sim$covariates,
+  facet_var = "TrueCommunity",
+  sort_var  = "Depth"
+)
+p_struct
+```
+
+With well-separated communities (which our simulation should produce), you
+expect each panel to be dominated by one color. Mixed bars indicate either
+genuinely ambiguous samples or label switching (communities are recovered but
+numbered differently than the true labels).
+
+```{r struct_custom_colors}
+# Custom colors
+eDNA_dmm_structure(
+  fit,
+  metadata         = sim$covariates,
+  facet_var        = "TrueCommunity",
+  community_colors = c(
+    "Community 1" = "#E63946",
+    "Community 2" = "#457B9D",
+    "Community 3" = "#2A9D8F",
+    "Community 4" = "#E9C46A"
+  )
+)
+```
+
+```{r struct_no_facet}
+# No faceting — useful for real data where you don't know the true structure
+# Sort by a covariate to reveal gradients
+eDNA_dmm_structure(
+  fit,
+  metadata  = sim$covariates,
+  sort_var  = "Depth"
+)
+```
+
+```{r struct_save}
+ggsave("structure_plot.png", p_struct, width = 10, height = 4, dpi = 300)
+```
+
+```{r struct_ggplot_extend}
+# ggplot2 customization: change strip text size, add caption
+p_struct +
+  theme(strip.text  = element_text(size = 13, face = "bold")) +
+  labs(caption = "Panels = true community | Sorted by depth within panel")
+```
+
+## Combining raw compositions with structure plot
+
+Because both `plot_true_compositions()` and `eDNA_dmm_structure()` use the
+same layout, they can be stacked directly with `cowplot` for a
+before/after comparison:
+
+```{r cowplot_combine, eval=FALSE}
+library(cowplot)
+
+p_raw    <- plot_true_compositions(counts, metadata = sim$covariates,
+                                    facet_var = "TrueCommunity", sort_var = "Depth")
+p_struct <- eDNA_dmm_structure(fit, metadata = sim$covariates,
+                                facet_var = "TrueCommunity", sort_var = "Depth")
+
+combined <- cowplot::plot_grid(
+  p_raw, p_struct,
+  ncol        = 1,
+  labels      = c("A", "B"),
+  label_size  = 16,
+  rel_heights = c(1, 1)
+)
+cowplot::ggsave2("fig_compositions_vs_assignments.png",
+                 combined, width = 10, height = 8, dpi = 300)
+```
+
+## NMDS ordination
+
+```{r nmds}
+nmds_result <- eDNA_dmm_nmds(fit)
+nmds_result$plot
+
+# Check stress value
+message("NMDS stress: ", round(nmds_result$nmds$stress, 3))
+# < 0.05 = excellent; 0.05-0.10 = good; 0.10-0.20 = adequate
+```
+
+```{r nmds_3d}
+# 3D NMDS for lower stress; view different axis pairs
+nmds_3d <- eDNA_dmm_nmds(fit, k = 3, nmds_axes = c(1, 3))
+nmds_3d$plot
+```
+
+```{r nmds_jaccard}
+# Jaccard distance instead of Bray-Curtis (presence/absence-weighted)
+eDNA_dmm_nmds(fit, distance = "jaccard", show_ellipse = FALSE)$plot
+```
+
+```{r nmds_custom}
+# Custom colors, no ellipses, larger points
+eDNA_dmm_nmds(
+  fit,
+  show_ellipse     = FALSE,
+  size_range       = c(2, 7),
+  community_colors = c("Community 1" = "#E63946", "Community 2" = "#457B9D",
+                       "Community 3" = "#2A9D8F", "Community 4" = "#E9C46A")
+)$plot
+```
+
+```{r nmds_save}
+ggsave("nmds.png", nmds_result$plot, width = 7, height = 6, dpi = 300)
+```
+
+## Beta coefficient plots
+
+```{r beta_joint}
+# Joint layout (default): all communities overlaid per covariate
+beta_result <- eDNA_dmm_beta(fit)
+beta_result$plot
+```
+
+```{r beta_separate}
+# Separate layout: one row per community, one column per covariate
+# Better for K > 3 where joint overlay gets crowded
+eDNA_dmm_beta(fit, layout = "separate")$plot
+```
+
+```{r beta_table}
+# Posterior summary table
+beta_result$table
+# Columns: community, covariate, mean, ci_5, ci_95,
+#          prob_positive, prob_negative, ess, reliability
+```
+
+**Interpreting the beta plot:**
+
+For our simulation, the true effects are:
+- Community 1 (deep + offshore): high depth, high distance from shore
+- Community 2 (surface + offshore): low depth, high distance from shore
+- Community 3 (deep + inshore): high depth, low distance from shore
+- Community 4 (surface + inshore, reference): this is the reference community
+
+So relative to Community 4:
+- Community 1 should have positive Depth beta and positive Distance_shore beta
+- Community 2 should have negative Depth beta and positive Distance_shore beta
+- Community 3 should have positive Depth beta and negative Distance_shore beta
+
+Check whether the posteriors are pulled in these directions relative to the
+Normal(0, 1) prior (grey).
+
+```{r beta_specific}
+# Plot only one covariate
+eDNA_dmm_beta(fit, covariates_to_plot = "Depth")$plot
+
+# Include the intercept
+eDNA_dmm_beta(fit, show_intercept = TRUE)$plot
+
+# Widen prior if you used a different prior SD in Stan
+eDNA_dmm_beta(fit, beta_prior_sd = 2.5)$plot
+```
+
+```{r beta_save}
+ggsave("beta_plot.png", beta_result$plot, width = 9, height = 5, dpi = 300)
+```
+
+---
+
+# Verifying recovery of true parameters
+
+One of the advantages of simulated data is that you can compare fitted values
+to the truth. Here is a quick check.
+
+## Community assignments
+
+```{r verify_assignments}
+# Compare MAP assignment to true community
+comparison <- data.frame(
+  sample_id     = fit$sample_info$sample_id,
+  fitted_comm   = fit$sample_info$z_hat,
+  true_comm     = paste0("Community ", sim$covariates$TrueCommunity),
+  certainty     = round(fit$sample_info$assignment_certainty, 2)
+)
+print(comparison)
+
+# Accuracy (ignoring label switching)
+# Note: community labels may be permuted — Community 1 in fit ≠ Community 1 in truth
+# A correct fit will show a 1:1 mapping between fitted and true, just possibly reordered
+table(comparison$fitted_comm, comparison$true_comm)
+```
+
+## Alpha recovery
+
+```{r verify_alpha}
+# Simulated truth: alpha = 3 (set internally in simulate_eDNA_survey)
+message("True alpha: 3.0")
+message("Fitted alpha: ", round(fit$alpha_mean, 2))
+
+# Full posterior
+alpha_draws <- rstan::extract(fit$stan_fit, pars = "alpha")$alpha
+hist(alpha_draws, breaks = 40, main = "Posterior for alpha",
+     xlab = "alpha", col = "steelblue")
+abline(v = 3.0, col = "red", lwd = 2, lty = 2)
+legend("topright", legend = "True value", col = "red", lty = 2, lwd = 2)
+```
+
+---
+
+# Working with real data
+
+The workflow for real eDNA metabarcoding data is identical — you just skip
+the simulation steps.
+
+```{r real_data_workflow, eval=FALSE}
+# 1. Load your count matrix (samples x taxa)
+counts <- read.csv("my_count_table.csv", row.names = 1) |> as.matrix()
+
+# 2. Load your metadata / covariates
+metadata <- read.csv("my_metadata.csv")
+
+# 3. Align them — critical step
+counts   <- counts[order(rownames(counts)), ]
+metadata <- metadata[order(metadata$sample_id), ]
+stopifnot(all(rownames(counts) == metadata$sample_id))
+
+# 4. Select covariates
+cov_matrix <- metadata[, c("depth", "latitude")]
+
+# 5. Select K using LOO
+loo_result <- eDNA_loo(counts, cov_matrix, K_range = 2:5)
+loo_result$plot
+
+# 6. Fit the selected K
+fit <- eDNA_dmm(counts, cov_matrix, K = 3)  # replace 3 with your chosen K
+
+# 7. Visualize
+eDNA_dmm_structure(fit, metadata = metadata, facet_var = "year",
+                   sort_var = "latitude")
+eDNA_dmm_nmds(fit)$plot
+eDNA_dmm_beta(fit)$plot
+```
+
+---
+
+# Troubleshooting
+
+## Divergent transitions
+
+```
+Warning: There were X divergent transitions after warmup.
+```
+
+This means the sampler is struggling with the posterior geometry. Try:
+
+1. `adapt_delta = 0.99` (increases step-size adaptation)
+2. `max_treedepth = 15`
+3. Try a lower K — more communities = harder geometry
+4. Check for all-zero rows/columns in your count matrix
+
+## Low ESS for beta parameters
+
+ESS < 100 for beta coefficients usually means the covariate has little effect
+on community membership. Look at the beta plot: if the posterior is nearly
+identical to the prior (grey), the data do not support that covariate effect.
+This is a valid scientific result, not a failure.
+
+## Very long runtime
+
+Each iteration requires N × K evaluations of the DirichletMultinomial likelihood,
+which is expensive for large N and K. Practical tips:
+
+- Start with `iter = 2000, warmup = 1000` for exploratory fits
+- Use `iter = 4000+` for final inference
+- Large S (many taxa) is less costly than large N or K
+- Filter to top taxa by total reads to reduce S without losing major signal
+
+## The model took too long and I killed it
+
+Any partial `.rds` file written by `saveRDS()` will be incomplete. Restart
+the fit with a fresh call to `eDNA_dmm()`. The compiled Stan model is cached,
+so subsequent runs skip compilation.
+
+---
+
+# Session information
+
+```{r session}
+sessionInfo()
+```
