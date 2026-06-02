@@ -1,3 +1,6 @@
+.onLoad <- function(libname, pkgname) {
+  rstan::rstan_options(auto_write = TRUE)
+}
 #' eDNAstructure: Dirichlet-Multinomial Mixture Models for eDNA Metabarcoding
 #'
 #' @description

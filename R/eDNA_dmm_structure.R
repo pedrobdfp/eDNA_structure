@@ -42,7 +42,7 @@
 #'   `"sample_id"`.
 #' @param facet_var A string: the name of a column in `metadata` to use for
 #'   faceting (creating separate panels). Pass `NULL` (the default) for a
-#'   single panel with all samples. Example: `"year"` or `"depth"`.
+#'   single panel with all samples. Example: `"year"` or `"depth_bin"`.
 #' @param sort_var A string: the name of a column in `metadata` to sort
 #'   samples within each panel. Default is `NULL`, which preserves the
 #'   original row order. Example: `"latitude"` to sort south-to-north.
@@ -80,11 +80,11 @@
 #' # Basic plot — all samples in one panel
 #' eDNA_dmm_structure(fit)
 #'
-#' # Faceted by year, sorted by latitude
+#' # Faceted by depth_bin, sorted by latitude
 #' eDNA_dmm_structure(
 #'   fit,
 #'   metadata  = data$covariates,
-#'   facet_var = "year",
+#'   facet_var = "depth_bin",
 #'   sort_var  = "latitude"
 #' )
 #'
@@ -121,16 +121,16 @@ eDNA_dmm_structure <- function(
     legend_position   = "bottom"
 ) {
   check_stan_fit_object(fit, "eDNA_dmm_structure")
-
+  
   K         <- fit$K
   si        <- fit$sample_info
   prob_cols <- paste0("prob_comm", seq_len(K))
-
+  
   # ── Community colors ──────────────────────────────────────────────────────────
   if (is.null(community_colors)) {
     community_colors <- make_community_colors(K)
   } else {
-    expected <- paste0("Community ", seq_len(K))
+    expected      <- paste0("Community ", seq_len(K))
     missing_comms <- setdiff(expected, names(community_colors))
     if (length(missing_comms) > 0) {
       rlang::abort(
@@ -142,20 +142,21 @@ eDNA_dmm_structure <- function(
       )
     }
   }
-
+  
   # ── Merge metadata if provided ────────────────────────────────────────────────
   if (!is.null(metadata)) {
     if (!is.data.frame(metadata)) {
       rlang::abort(
         c(
           "`metadata` must be a data frame.",
-          i = paste0("You supplied an object of class: ", paste(class(metadata), collapse = ", "))
+          i = paste0("You supplied an object of class: ",
+                     paste(class(metadata), collapse = ", "))
         )
       )
     }
     if (!sample_id_col %in% names(metadata)) {
-      bad_cols <- setdiff(sample_id_col, names(metadata))
-      near     <- names(metadata)[which.min(adist(sample_id_col, names(metadata), ignore.case = TRUE))]
+      near <- names(metadata)[which.min(adist(sample_id_col, names(metadata),
+                                              ignore.case = TRUE))]
       rlang::abort(
         c(
           paste0("Column '", sample_id_col, "' not found in `metadata`."),
@@ -164,44 +165,52 @@ eDNA_dmm_structure <- function(
         )
       )
     }
-    si <- merge(si, metadata, by.x = "sample_id", by.y = sample_id_col, all.x = TRUE)
+    si <- merge(si, metadata, by.x = "sample_id", by.y = sample_id_col,
+                all.x = TRUE)
   }
-
-  # ── Validate facet_var and sort_var ────────────────────────────────────────────
-  if (!is.null(facet_var)) {
-    if (!facet_var %in% names(si)) {
-      rlang::abort(
-        c(
-          paste0("`facet_var = '", facet_var, "'` not found."),
-          i = if (!is.null(metadata))
-            paste0("Available columns in merged data: ", paste(names(si), collapse = ", "))
-          else
-            "Pass a `metadata` data frame containing this column."
-        )
+  
+  # ── Validate facet_var and sort_var ───────────────────────────────────────────
+  if (!is.null(facet_var) && !facet_var %in% names(si)) {
+    rlang::abort(
+      c(
+        paste0("`facet_var = '", facet_var, "'` not found."),
+        i = if (!is.null(metadata))
+          paste0("Available columns in merged data: ", paste(names(si), collapse = ", "))
+        else
+          "Pass a `metadata` data frame containing this column."
       )
-    }
+    )
   }
-  if (!is.null(sort_var)) {
-    if (!sort_var %in% names(si)) {
-      rlang::abort(
-        c(
-          paste0("`sort_var = '", sort_var, "'` not found."),
-          i = if (!is.null(metadata))
-            paste0("Available columns in merged data: ", paste(names(si), collapse = ", "))
-          else
-            "Pass a `metadata` data frame containing this column."
-        )
+  if (!is.null(sort_var) && !sort_var %in% names(si)) {
+    rlang::abort(
+      c(
+        paste0("`sort_var = '", sort_var, "'` not found."),
+        i = if (!is.null(metadata))
+          paste0("Available columns in merged data: ", paste(names(si), collapse = ", "))
+        else
+          "Pass a `metadata` data frame containing this column."
       )
-    }
+    )
   }
-
+  
   # ── Sort samples ──────────────────────────────────────────────────────────────
   if (!is.null(sort_var)) {
     si <- si[order(si[[sort_var]]), ]
   }
-
-  # ── Pivot to long format for ggplot ───────────────────────────────────────────
-  si$x_pos <- seq_len(nrow(si))
+  
+  # ── Assign x positions ────────────────────────────────────────────────────────
+  # Critical: x_pos must reset within each facet panel, otherwise ggplot
+  # sees duplicate x values across panels and dodges instead of stacking.
+  if (!is.null(facet_var)) {
+    si <- si %>%
+      dplyr::group_by(dplyr::across(dplyr::all_of(facet_var))) %>%
+      dplyr::mutate(x_pos = dplyr::row_number()) %>%
+      dplyr::ungroup()
+  } else {
+    si$x_pos <- seq_len(nrow(si))
+  }
+  
+  # ── Pivot to long format ──────────────────────────────────────────────────────
   plot_long <- tidyr::pivot_longer(
     si,
     cols      = dplyr::all_of(prob_cols),
@@ -213,18 +222,21 @@ eDNA_dmm_structure <- function(
     levels = prob_cols,
     labels = paste0("Community ", seq_len(K))
   )
-
-  # ── Build plot ────────────────────────────────────────────────────────────────
+  
+  # ── Titles ────────────────────────────────────────────────────────────────────
   title_str    <- title    %||% sprintf("Posterior Community Assignments  (K = %d)", K)
   subtitle_str <- subtitle %||% sprintf(
     "%d samples  |  bar height = posterior membership probability", nrow(si)
   )
-
-  p <- ggplot2::ggplot(plot_long,
-                       ggplot2::aes(x = .data$x_pos,
-                                    y = .data$probability,
-                                    fill = .data$community)) +
-    ggplot2::geom_bar(stat = "identity", width = bar_width) +
+  
+  # ── Build plot ────────────────────────────────────────────────────────────────
+  p <- ggplot2::ggplot(
+    plot_long,
+    ggplot2::aes(x     = .data$x_pos,
+                 y     = .data$probability,
+                 fill  = .data$community)
+  ) +
+    ggplot2::geom_bar(stat = "identity", width = bar_width, position = "stack") +
     ggplot2::scale_fill_manual(values = community_colors, name = NULL) +
     ggplot2::scale_x_continuous(expand = c(0, 0)) +
     ggplot2::scale_y_continuous(
@@ -248,11 +260,12 @@ eDNA_dmm_structure <- function(
       plot.subtitle    = ggplot2::element_text(color = "grey40", size = base_size - 2)
     ) +
     ggplot2::guides(fill = ggplot2::guide_legend(nrow = 1))
-
+  
   # ── X-axis labels ─────────────────────────────────────────────────────────────
   if (x_text) {
     p <- p + ggplot2::theme(
-      axis.text.x  = ggplot2::element_text(angle = 45, hjust = 1, size = base_size - 3),
+      axis.text.x  = ggplot2::element_text(angle = 45, hjust = 1,
+                                           size = base_size - 3),
       axis.ticks.x = ggplot2::element_line()
     )
   } else {
@@ -261,8 +274,10 @@ eDNA_dmm_structure <- function(
       axis.ticks.x = ggplot2::element_blank()
     )
   }
-
+  
   # ── Faceting ──────────────────────────────────────────────────────────────────
+  # free_x: each panel has its own x scale (so x_pos 1..n per panel)
+  # space = "free_x": panel widths are proportional to number of samples
   if (!is.null(facet_var)) {
     p <- p + ggplot2::facet_grid(
       reformulate(facet_var),
@@ -270,7 +285,7 @@ eDNA_dmm_structure <- function(
       space  = "free_x"
     )
   }
-
+  
   p
 }
 
