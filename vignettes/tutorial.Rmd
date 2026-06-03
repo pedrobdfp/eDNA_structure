@@ -60,8 +60,6 @@ dataset (`get_example_data()`).
   covariate effects — so you can check that the model gives the right answers
 - **Power analysis**: how many samples do you need? What spillover level is too
   high for the model to separate communities?
-- **Method development**: test changes to the Stan model on known-truth data
-  before applying to real surveys
 
 ## The five simulation steps
 
@@ -253,23 +251,6 @@ Covariates are Z-score standardized internally when `scale_covariates = TRUE`
 (the default). Do not pre-standardize — let the function handle it so
 beta coefficients remain on a common scale.
 
-## Converting long-format data
-
-If your count data are in long format (one row per sample-taxon):
-
-```{r long_to_wide, eval=FALSE}
-library(tidyr)
-
-count_matrix <- long_df |>
-  pivot_wider(
-    names_from  = taxon_col,
-    values_from = count_col,
-    values_fill = 0L
-  ) |>
-  tibble::column_to_rownames("sample_id_col") |>
-  as.matrix()
-```
-
 ---
 
 # Visualizing raw compositions (before fitting)
@@ -307,7 +288,7 @@ p_raw <- plot_true_compositions(
   metadata  = sim$covariates,
   facet_var = "TrueCommunity"
 )
-ggsave("raw_compositions.png", p_raw, width = 10, height = 4, dpi = 300)
+#ggsave("raw_compositions.png", p_raw, width = 10, height = 4, dpi = 300)
 ```
 
 ---
