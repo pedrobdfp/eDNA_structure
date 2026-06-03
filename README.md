@@ -53,7 +53,7 @@ Full rstan installation guide: <https://mc-stan.org/rstan/articles/rstan.html>
 
 ### Install eDNA_structure
 
-Several chunks of bleack text will appear. They are related to the stan code pre-compilling.
+Several chunks of black text will appear. They are related to the stan code pre-compilling.
 
 ```r
 # Install the remotes package if needed
