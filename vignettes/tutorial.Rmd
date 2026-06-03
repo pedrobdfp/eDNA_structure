@@ -27,6 +27,7 @@ knitr::opts_chunk$set(
 ```{r load}
 library(eDNAstructure)
 library(ggplot2)   # for post-hoc plot customization
+library(dplyr)
 ```
 
 ---
@@ -86,7 +87,7 @@ community_mat <- generate_community_compositions(
   low_unique_freq       = c(0.02, 0.04),
   group_shared_freq     = c(0.02, 0.04),
   shared_freq           = c(0.02, 0.04),
-  shared_presence       = 0,         # no globally shared species
+  shared_presence       = 10,         # no globally shared species
   spillover             = 0.15,      # 15% of a species' frequency leaks to other communities
   seed                  = 2026
 )
@@ -163,8 +164,8 @@ drawn from community-specific distributions.
 ```{r sim_covariates}
 # Define where each community lives in covariate space
 community_covariate_means <- matrix(
-  c(80, 200,   # Community 1: deep + offshore
-    10, 200,   # Community 2: surface + offshore
+  c(80, 100,   # Community 1: deep + offshore
+    10, 100,   # Community 2: surface + offshore
     80,  20,   # Community 3: deep + inshore
     10,  20),  # Community 4: surface + inshore
   nrow = 4, byrow = TRUE,
@@ -293,93 +294,32 @@ p_raw <- plot_true_compositions(
 
 ---
 
-# Selecting K: how many communities?
-
-Rarely do you know K in advance. The standard approach is to fit models for
-K = 2, 3, 4, 5 and compare them using Leave-One-Out cross-validation (LOO-CV).
-
-`eDNA_loo()` does this automatically. It takes a few minutes per K value.
-
-```{r loo, cache=TRUE}
-loo_result <- eDNA_loo(
-  counts     = counts,
-  covariates = cov_matrix,
-  K_range    = 2:5,
-  iter       = 4000,
-  warmup     = 2000,
-  seed       = 13
-)
-```
-
-```{r loo_plot}
-# Elbow plot — look for the K where gains flatten
-loo_result$plot
-```
-
-```{r loo_table}
-# Numeric table of LOO-ELPD ± SE
-loo_result$loo_table
-```
-
-```
-  K       elpd       se
-1 2 -8431.22  64.1
-2 3 -8219.56  61.8
-3 4 -8188.44  60.2   ← gain flattens here
-4 5 -8191.03  61.5
-```
-
-**How to read this:**
-
-- Higher LOO-ELPD = better predictive performance
-- The gain from K=3 to K=4 should be large (the true K); from K=4 to K=5
-  it should be small (diminishing returns)
-- If two adjacent models are within ~2 SE of each other, prefer the simpler one
-
-For data generated with K=4, the elbow should appear at K=4.
-
----
-
 # Fitting the model
 
 ## Basic fit
 
 ```{r fit, cache=TRUE}
-fit <- eDNA_dmm(
+fit4 <- eDNA_dmm(
   counts     = counts,
   covariates = cov_matrix,
-  K          = 4
+  K          = 4,            # The number of communities to fit
+  chains     = 1,            # single chain (see ?eDNA_dmm)
+  iter       = 10000,         # total MCMC iterations
+  warmup     = 5000,         # warmup iterations. Should be ~ half of iter
 )
 ```
 
-When you run this, Stan prints sampling progress to the console. This is normal.
-The first run compiles the Stan model (1–2 minutes), after which subsequent runs
-skip straight to sampling.
+When you run this, Stan prints sampling progress to the console. It will also print some diagnostics.
+If you ever get warning about low effective sample size, you should increase the number of MCMC warmup and iterations
 
 ## Reading the output
 
 ```{r fit_print}
-print(fit)
-```
-
-```
-eDNA Dirichlet-Multinomial Mixture Model
-=========================================
-  K (communities)  : 4
-  N (samples)      : 20
-  S (taxa)         : 40
-  Covariates       : Depth, Distance_shore
-  Mean alpha       : 3.14
-
-Community sizes (MAP assignment):
-  Community 1     : 5 samples (25.0%)
-  Community 2     : 5 samples (25.0%)
-  Community 3     : 5 samples (25.0%)
-  Community 4     : 5 samples (25.0%)
+print(fit4)
 ```
 
 ```{r fit_summary}
-summary(fit)
+summary(fit4)
 ```
 
 `summary()` reports:
@@ -412,6 +352,54 @@ fit$alpha_mean   # should be close to 3.0 (the simulated truth)
 
 ---
 
+# Selecting K: how many communities?
+
+Rarely do you know K in advance. The standard approach is to fit models for a variety of
+K  values (2, 3, 4, 5, etc) and compare them using Leave-One-Out cross-validation (LOO-CV).
+
+`eDNA_loo()` fits the model for each K and compares them automatically. It takes a few minutes per K value.
+
+```{r loo, cache=TRUE}
+loo_result <- eDNA_loo(
+  counts     = counts,
+  covariates = cov_matrix,
+  K_range    = 2:5,
+  iter       = 10000,
+  warmup     = 5000,
+  seed       = 13
+)
+```
+
+```{r loo_plot}
+# Elbow plot — look for the K where gains flatten
+loo_result$plot
+```
+
+```{r loo_table}
+# Numeric table of LOO-ELPD ± SE
+loo_result$loo_table
+```
+
+```
+  K       elpd       se
+1 2 -8431.22  64.1
+2 3 -8219.56  61.8
+3 4 -8188.44  60.2   ← gain flattens here
+4 5 -8191.03  61.5
+```
+
+**How to read this:**
+
+- Higher LOO-ELPD = better predictive performance
+- The gain from K=3 to K=4 should be large (the true K); from K=4 to K=5
+  it should be small (diminishing returns)
+- If two adjacent models are within ~2 SE of each other, prefer the simpler one
+
+For data generated with K=4, the elbow should appear at K=4.
+
+- Note that some school of thoughts advocate that you should also always try k = n of regions/sites anyways
+---
+
 # Visualization
 
 All three visualization functions return `ggplot2` objects. You can print them,
@@ -421,7 +409,7 @@ save them with `ggsave()`, or modify them with additional ggplot2 layers.
 
 ```{r struct_basic}
 # Basic: all samples, single panel
-eDNA_dmm_structure(fit)
+eDNA_dmm_structure(fit4)
 ```
 
 ```{r struct_faceted}
@@ -443,7 +431,7 @@ numbered differently than the true labels).
 
 ```{r struct_custom_colors}
 # Custom colors
-eDNA_dmm_structure(
+Structurek4 <- eDNA_dmm_structure(
   fit,
   metadata         = sim$covariates,
   facet_var        = "TrueCommunity",
@@ -454,6 +442,7 @@ eDNA_dmm_structure(
     "Community 4" = "#E9C46A"
   )
 )
+print(Structurek4)
 ```
 
 ```{r struct_no_facet}
@@ -467,12 +456,12 @@ eDNA_dmm_structure(
 ```
 
 ```{r struct_save}
-ggsave("structure_plot.png", p_struct, width = 10, height = 4, dpi = 300)
+ggsave("structure_plot.png", Structurek4, width = 10, height = 4, dpi = 300)
 ```
 
 ```{r struct_ggplot_extend}
 # ggplot2 customization: change strip text size, add caption
-p_struct +
+Structurek4 +
   theme(strip.text  = element_text(size = 13, face = "bold")) +
   labs(caption = "Panels = true community | Sorted by depth within panel")
 ```
@@ -498,6 +487,7 @@ combined <- cowplot::plot_grid(
   label_size  = 16,
   rel_heights = c(1, 1)
 )
+print(combined)
 cowplot::ggsave2("fig_compositions_vs_assignments.png",
                  combined, width = 10, height = 8, dpi = 300)
 ```
