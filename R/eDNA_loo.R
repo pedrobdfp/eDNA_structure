@@ -93,7 +93,7 @@ eDNA_loo <- function(
   names(loo_list) <- paste0("K", K_range)
 
   # ── LOO comparison ────────────────────────────────────────────────────────────
-  loo_compare_result <- do.call(loo::loo_compare, loo_list)
+  loo_compare_result <- do.call(loo::loo_compare, unname(loo_list))
 
   loo_df <- data.frame(
     K    = K_range,

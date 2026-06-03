@@ -1,10 +1,7 @@
-.onLoad <- function(libname, pkgname) {
-  rstan::rstan_options(auto_write = TRUE)
-}
-#' eDNAstructure: Dirichlet-Multinomial Mixture Models for eDNA Metabarcoding
+#' eDNA_structure: Dirichlet-Multinomial Mixture Models for eDNA Metabarcoding
 #'
 #' @description
-#' `eDNAstructure` fits Bayesian Dirichlet-Multinomial Mixture (DMM) models
+#' `eDNA_structure` fits Bayesian Dirichlet-Multinomial Mixture (DMM) models
 #' to eDNA read count data from metabarcoding surveys. The model simultaneously
 #' estimates:
 #'
@@ -38,8 +35,8 @@
 #' objects that can be freely customized downstream.
 #'
 #' @docType package
-#' @name eDNAstructure-package
-#' @aliases eDNAstructure
+#' @name eDNA_structure-package
+#' @aliases eDNA_structure
 "_PACKAGE"
 
 #' @importFrom rstan stan extract as.matrix.stanfit
@@ -60,3 +57,9 @@
 #' @importFrom rlang .data abort warn inform
 #' @importFrom methods is
 NULL
+
+.onLoad <- function(libname, pkgname) {
+  rstan::rstan_options(auto_write = TRUE)
+  modules <- paste0("stan_fit4", names(stanmodels), "_mod")
+  for (m in modules) methods::loadModule(m, what = TRUE)
+}

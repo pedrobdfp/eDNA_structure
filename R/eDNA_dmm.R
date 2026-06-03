@@ -23,7 +23,7 @@
 #' labels.
 #'
 #' `covariates` should be a **sample × covariate** matrix or data frame. It
-#' must have the same number of rows as `counts`, *in the same order*. Covariates
+#' must have the same number of rows as `counts`, in the same order. Covariates
 #' are Z-score standardized internally by default (`scale_covariates = TRUE`),
 #' which is strongly recommended for interpretable beta coefficients and good
 #' MCMC mixing. Pass `NULL` to fit an intercept-only model.
@@ -253,19 +253,9 @@ eDNA_dmm <- function(
     alpha_rate  = alpha_rate
   )
 
-  # ── Locate bundled Stan model ─────────────────────────────────────────────────
-  stan_file <- system.file("stan", "dmm.stan", package = "eDNAstructure")
-  if (!nzchar(stan_file)) {
-    rlang::abort(
-      c(
-        "Cannot find the bundled Stan model file.",
-        i = "This usually means the package was not installed correctly.",
-        i = "Try reinstalling: `remotes::install_github(`pedrobdfp/eDNA_structure`)`"
-      )
-    )
-  }
-
-  # ── Fit ──────────────────────────────────────────────────────────────────────
+  # ── Fit using pre-compiled Stan model ────────────────────────────────────────
+  # stanmodels$dmm is compiled at install time via rstantools — no runtime
+  # compilation, no C++ output ever printed to the user.
   if (verbose) {
     message(sprintf(
       "Fitting DMM: N=%d samples, S=%d taxa, K=%d communities, P=%d covariates",
@@ -280,15 +270,15 @@ eDNA_dmm <- function(
     }
   }
 
-  stan_fit <- rstan::stan(
-    file    = stan_file,
+  stan_fit <- rstan::sampling(
+    object  = stanmodels$dmm,
     data    = stan_data,
     chains  = chains,
     iter    = iter,
     warmup  = warmup,
     cores   = 1L,
     seed    = seed,
-    verbose = verbose,
+    verbose = FALSE,
     refresh = if (verbose) max(1, (iter - warmup) %/% 10) else 0,
     control = list(
       adapt_delta   = adapt_delta,
