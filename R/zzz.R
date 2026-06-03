@@ -61,5 +61,5 @@ NULL
 .onLoad <- function(libname, pkgname) {
   rstan::rstan_options(auto_write = TRUE)
   modules <- paste0("stan_fit4", names(stanmodels), "_mod")
-  for (m in modules) methods::loadModule(m, what = TRUE)
+  for (m in modules) Rcpp::loadModule(m, what = TRUE)
 }
