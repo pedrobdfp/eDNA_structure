@@ -4,7 +4,7 @@ import(methods)
 importFrom(rstan,sampling)
 importFrom(rstantools,rstan_config)
 importFrom(RcppParallel,RcppParallelLibs)
-useDynLib(eDNA_structure, .registration = TRUE)
+useDynLib(eDNAstructure, .registration = TRUE)
 
 export(eDNA_dmm)
 export(eDNA_dmm_beta)
