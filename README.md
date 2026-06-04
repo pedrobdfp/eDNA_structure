@@ -98,7 +98,7 @@ loo_result$plot
 
 
 # The loo_result object stores all fitted models — no need to refit
-# Extract the K=3 model directly:
+# Extract the K=4 model directly:
 fit <- loo_result$fits[["K4"]]
 
 # Or using the K value as a number:
