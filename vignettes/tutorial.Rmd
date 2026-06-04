@@ -400,6 +400,39 @@ For data generated with K=4, the elbow should appear at K=4.
 - Note that some school of thoughts advocate that you should also always try k = n of regions/sites anyways
 ---
 
+## Extracting the best model from LOO results
+
+The `loo_result` object also stores every fitted model internally, so you do not need to refit after selecting K. This saves substantial computation time, which is particularly important when models take hours to run 
+
+```{r extract-best-model}
+# Inspect what K values were fitted
+names(loo_result$fits)
+
+# Look at the LOO table to pick K
+loo_result$loo_table
+
+# Extract the best model directly — no refitting needed
+# Here we select K=4 based on the elbow in the LOO-ELPD plot
+K_best <- 4
+fit <- loo_result$fits[[paste0("K", K_best)]]
+
+# Confirm the extracted model
+print(fit)
+summary(fit)
+```
+
+The `loo_result$fits` list is named `"K2"`, `"K3"`, etc., matching the `K_range` you passed to `eDNA_loo()`. You can also iterate over all fits for custom comparisons:
+
+```{r inspect-all-fits, eval=FALSE}
+# Compare alpha (overdispersion) across K values
+sapply(loo_result$fits, function(f) round(f$alpha_mean, 2))
+
+# Compare number of samples assigned with high certainty (> 0.9) per K
+sapply(loo_result$fits, function(f) sum(f$sample_info$assignment_certainty > 0.9))
+```
+
+From here, `fit` is a standard `edna_dmm_fit` object and all visualization functions work as normal.
+
 # Visualization
 
 All three visualization functions return `ggplot2` objects. You can print them,
@@ -494,6 +527,12 @@ cowplot::ggsave2("fig_compositions_vs_assignments.png",
 
 ## NMDS ordination
 
+We can also visualize the results in an NMDS ordination plot colored by community composition.
+For NMDS plots and metabarcoding data, it is more conservative to use Jaccard distance,
+which considers only presence/ absence. However, you may also use Bray-Curtis distance if 
+you account for the compositionality of the data. Our package function does this automatically
+with the eDNA index (Kelly et al., 2019).
+
 ```{r nmds}
 nmds_result <- eDNA_dmm_nmds(fit)
 nmds_result$plot
@@ -519,7 +558,7 @@ eDNA_dmm_nmds(fit, distance = "jaccard", show_ellipse = FALSE)$plot
 eDNA_dmm_nmds(
   fit,
   show_ellipse     = FALSE,
-  size_range       = c(2, 7),
+  size_range       = c(2, 5),
   community_colors = c("Community 1" = "#E63946", "Community 2" = "#457B9D",
                        "Community 3" = "#2A9D8F", "Community 4" = "#E9C46A")
 )$plot
@@ -647,7 +686,11 @@ cov_matrix <- metadata[, c("depth", "latitude")]
 loo_result <- eDNA_loo(counts, cov_matrix, K_range = 2:5)
 loo_result$plot
 
-# 6. Fit the selected K
+# 5.5 Extract the chosen K output from the LOO result
+K_best <- 3
+fit <- loo_result$fits[[paste0("K", K_best)]]
+
+# 6. Or simply fit with a pre-selected K
 fit <- eDNA_dmm(counts, cov_matrix, K = 3)  # replace 3 with your chosen K
 
 # 7. Visualize
@@ -687,7 +730,7 @@ Each iteration requires N × K evaluations of the DirichletMultinomial likelihoo
 which is expensive for large N and K. Practical tips:
 
 - Start with `iter = 2000, warmup = 1000` for exploratory fits
-- Use `iter = 4000+` for final inference
+- Use `iter = 8000+` for final inference
 - Large S (many taxa) is less costly than large N or K
 - Filter to top taxa by total reads to reduce S without losing major signal
 

@@ -81,12 +81,7 @@ plot_true_compositions(
   facet_var = "TrueCommunity"
 )
 
-# Select K using LOO cross-validation
-loo_result <- eDNA_loo(data$counts, data$covariates[, c("Depth", "Distance_shore")],
-                       K_range = 2:5)
-loo_result$plot
-
-# Fit the model
+# Fit the model with a given number of communities (K)
 fit <- eDNA_dmm(
   counts     = data$counts,
   covariates = data$covariates[, c("Depth", "Distance_shore")],
@@ -95,6 +90,25 @@ fit <- eDNA_dmm(
 
 print(fit)
 summary(fit)
+
+# Or select K using LOO cross-validation
+loo_result <- eDNA_loo(data$counts, data$covariates[, c("Depth", "Distance_shore")],
+                       K_range = 2:5)
+loo_result$plot
+
+
+# The loo_result object stores all fitted models — no need to refit
+# Extract the K=3 model directly:
+fit <- loo_result$fits[["K4"]]
+
+# Or using the K value as a number:
+K_best <- 4
+fit <- loo_result$fits[[paste0("K", K_best)]]
+
+# Confirm what you have:
+print(fit)
+
+##You can also plot the results!
 
 # Structure plot — one bar per sample, colored by community membership probability
 eDNA_dmm_structure(fit, metadata = data$covariates,
