@@ -41,11 +41,16 @@
 #'   matches sample IDs. Only used when `metadata` is not NULL. Default is
 #'   `"sample_id"`.
 #' @param facet_var A string: the name of a column in `metadata` to use for
-#'   faceting (creating separate panels). Pass `NULL` (the default) for a
-#'   single panel with all samples. Example: `"year"` or `"depth_bin"`.
+#'   column facets (creating separate panels side by side). Pass `NULL` (the
+#'   default) for a single panel with all samples. Example: `"year"`.
+#' @param facet_row_var A string: the name of a column in `metadata` to use for
+#'   row facets (stacking panels vertically). Combine with `facet_var` for a
+#'   full grid: e.g. `facet_var = "year"` and `facet_row_var = "depth_bin"`
+#'   gives depth strata as rows and years as columns — the layout used in
+#'   Brandão-Dias et al. Pass `NULL` (default) for no row faceting.
 #' @param sort_var A string: the name of a column in `metadata` to sort
 #'   samples within each panel. Default is `NULL`, which preserves the
-#'   original row order. Example: `"latitude"` to sort south-to-north.
+#'   original row order. Example: `"lat"` to sort south-to-north.
 #' @param community_colors A named character vector mapping community names
 #'   (e.g., `"Community 1"`) to color hex codes. Pass `NULL` (the default)
 #'   to use the automatic HCL palette. Must include all K communities.
@@ -65,6 +70,19 @@
 #' @param legend_position A string passed to [ggplot2::theme()]: where to
 #'   place the legend. One of `"bottom"` (default), `"right"`, `"left"`,
 #'   `"top"`, or `"none"`.
+#' @param vline_var A string: the name of a numeric column in `metadata` to
+#'   use for placing a vertical reference line within each panel. The line is
+#'   drawn at the bar position closest to `vline_value`. Typical use:
+#'   `vline_var = "lat"` with `vline_value = 40.44` to mark Cape Mendocino.
+#'   Pass `NULL` (default) for no vertical line.
+#' @param vline_value A numeric scalar: the threshold value in `vline_var`
+#'   space at which to draw the vertical reference line. Required when
+#'   `vline_var` is set.
+#' @param vline_color A string: color of the reference line. Default `"black"`.
+#' @param vline_linetype A string: linetype of the reference line. Default
+#'   `"dashed"`. Any ggplot2 linetype string is accepted.
+#' @param vline_linewidth A positive number: line width of the reference line.
+#'   Default `0.7`.
 #'
 #' @return A [ggplot2::ggplot()] object. Print it to display, or save with
 #'   [ggplot2::ggsave()]. The object can be further modified with additional
@@ -80,11 +98,11 @@
 #' # Basic plot — all samples in one panel
 #' eDNA_dmm_structure(fit)
 #'
-#' # Faceted by depth_bin, sorted by latitude
+#' # Faceted by year, sorted by latitude
 #' eDNA_dmm_structure(
 #'   fit,
 #'   metadata  = data$covariates,
-#'   facet_var = "depth_bin",
+#'   facet_var = "year",
 #'   sort_var  = "latitude"
 #' )
 #'
@@ -111,6 +129,7 @@ eDNA_dmm_structure <- function(
     metadata          = NULL,
     sample_id_col     = "sample_id",
     facet_var         = NULL,
+    facet_row_var     = NULL,
     sort_var          = NULL,
     community_colors  = NULL,
     bar_width         = 0.9,
@@ -118,7 +137,12 @@ eDNA_dmm_structure <- function(
     base_size         = 11,
     title             = NULL,
     subtitle          = NULL,
-    legend_position   = "bottom"
+    legend_position   = "bottom",
+    vline_var         = NULL,
+    vline_value       = NULL,
+    vline_color       = "black",
+    vline_linetype    = "dashed",
+    vline_linewidth   = 0.7
 ) {
   check_stan_fit_object(fit, "eDNA_dmm_structure")
   
@@ -130,7 +154,7 @@ eDNA_dmm_structure <- function(
   if (is.null(community_colors)) {
     community_colors <- make_community_colors(K)
   } else {
-    expected      <- paste0("Community ", seq_len(K))
+    expected <- paste0("Community ", seq_len(K))
     missing_comms <- setdiff(expected, names(community_colors))
     if (length(missing_comms) > 0) {
       rlang::abort(
@@ -149,14 +173,13 @@ eDNA_dmm_structure <- function(
       rlang::abort(
         c(
           "`metadata` must be a data frame.",
-          i = paste0("You supplied an object of class: ",
-                     paste(class(metadata), collapse = ", "))
+          i = paste0("You supplied an object of class: ", paste(class(metadata), collapse = ", "))
         )
       )
     }
     if (!sample_id_col %in% names(metadata)) {
-      near <- names(metadata)[which.min(adist(sample_id_col, names(metadata),
-                                              ignore.case = TRUE))]
+      bad_cols <- setdiff(sample_id_col, names(metadata))
+      near     <- names(metadata)[which.min(adist(sample_id_col, names(metadata), ignore.case = TRUE))]
       rlang::abort(
         c(
           paste0("Column '", sample_id_col, "' not found in `metadata`."),
@@ -165,32 +188,62 @@ eDNA_dmm_structure <- function(
         )
       )
     }
-    si <- merge(si, metadata, by.x = "sample_id", by.y = sample_id_col,
-                all.x = TRUE)
+    si <- merge(si, metadata, by.x = "sample_id", by.y = sample_id_col, all.x = TRUE)
   }
   
-  # ── Validate facet_var and sort_var ───────────────────────────────────────────
-  if (!is.null(facet_var) && !facet_var %in% names(si)) {
-    rlang::abort(
-      c(
-        paste0("`facet_var = '", facet_var, "'` not found."),
-        i = if (!is.null(metadata))
-          paste0("Available columns in merged data: ", paste(names(si), collapse = ", "))
-        else
-          "Pass a `metadata` data frame containing this column."
+  # ── Validate facet_var and sort_var ────────────────────────────────────────────
+  if (!is.null(facet_var)) {
+    if (!facet_var %in% names(si)) {
+      rlang::abort(
+        c(
+          paste0("`facet_var = '", facet_var, "'` not found."),
+          i = if (!is.null(metadata))
+            paste0("Available columns in merged data: ", paste(names(si), collapse = ", "))
+          else
+            "Pass a `metadata` data frame containing this column."
+        )
       )
-    )
+    }
   }
-  if (!is.null(sort_var) && !sort_var %in% names(si)) {
-    rlang::abort(
-      c(
-        paste0("`sort_var = '", sort_var, "'` not found."),
-        i = if (!is.null(metadata))
-          paste0("Available columns in merged data: ", paste(names(si), collapse = ", "))
-        else
-          "Pass a `metadata` data frame containing this column."
+  if (!is.null(sort_var)) {
+    if (!sort_var %in% names(si)) {
+      rlang::abort(
+        c(
+          paste0("`sort_var = '", sort_var, "'` not found."),
+          i = if (!is.null(metadata))
+            paste0("Available columns in merged data: ", paste(names(si), collapse = ", "))
+          else
+            "Pass a `metadata` data frame containing this column."
+        )
       )
-    )
+    }
+  }
+  
+  # ── Validate facet_row_var ────────────────────────────────────────────────────
+  if (!is.null(facet_row_var)) {
+    if (!facet_row_var %in% names(si)) {
+      rlang::abort(
+        c(
+          paste0("`facet_row_var = '", facet_row_var, "'` not found."),
+          i = paste0("Available columns in merged data: ", paste(names(si), collapse = ", "))
+        )
+      )
+    }
+  }
+  
+  # ── Validate vline args ───────────────────────────────────────────────────────
+  if (!is.null(vline_var) && !is.null(vline_value)) {
+    if (!vline_var %in% names(si)) {
+      rlang::abort(
+        c(
+          paste0("`vline_var = '", vline_var, "'` not found."),
+          i = paste0("Available columns in merged data: ", paste(names(si), collapse = ", "))
+        )
+      )
+    }
+    if (!is.numeric(si[[vline_var]])) {
+      rlang::abort("`vline_var` must point to a numeric column (e.g. latitude).")
+    }
   }
   
   # ── Sort samples ──────────────────────────────────────────────────────────────
@@ -198,19 +251,43 @@ eDNA_dmm_structure <- function(
     si <- si[order(si[[sort_var]]), ]
   }
   
-  # ── Assign x positions ────────────────────────────────────────────────────────
-  # Critical: x_pos must reset within each facet panel, otherwise ggplot
-  # sees duplicate x values across panels and dodges instead of stacking.
-  if (!is.null(facet_var)) {
-    si <- si %>%
-      dplyr::group_by(dplyr::across(dplyr::all_of(facet_var))) %>%
-      dplyr::mutate(x_pos = dplyr::row_number()) %>%
+  # ── Pivot to long format for ggplot ───────────────────────────────────────────
+  # x_pos is assigned within each facet combination so bars are always 1..n
+  # within each panel, which makes the vline calculation correct.
+  facet_group_vars <- c(facet_var, facet_row_var)
+  facet_group_vars <- facet_group_vars[!is.null(facet_group_vars)]
+  
+  if (length(facet_group_vars) > 0) {
+    si <- si |>
+      dplyr::group_by(dplyr::across(dplyr::all_of(facet_group_vars))) |>
+      dplyr::mutate(x_pos = dplyr::row_number()) |>
       dplyr::ungroup()
   } else {
     si$x_pos <- seq_len(nrow(si))
   }
   
-  # ── Pivot to long format ──────────────────────────────────────────────────────
+  # ── Compute vline positions ───────────────────────────────────────────────────
+  # For each facet combination, find the x_pos after which vline_var crosses
+  # vline_value. The line is drawn at x_pos + 0.5 (between bars).
+  vline_df <- NULL
+  if (!is.null(vline_var) && !is.null(vline_value)) {
+    group_vars <- if (length(facet_group_vars) > 0) facet_group_vars else character(0)
+    
+    if (length(group_vars) > 0) {
+      vline_df <- si |>
+        dplyr::select(dplyr::all_of(c(group_vars, vline_var, "x_pos"))) |>
+        dplyr::distinct() |>
+        dplyr::group_by(dplyr::across(dplyr::all_of(group_vars))) |>
+        dplyr::summarise(
+          vline_x = x_pos[which.min(abs(.data[[vline_var]] - vline_value))] + 0.5,
+          .groups = "drop"
+        )
+    } else {
+      vline_df <- data.frame(
+        vline_x = si$x_pos[which.min(abs(si[[vline_var]] - vline_value))] + 0.5
+      )
+    }
+  }
   plot_long <- tidyr::pivot_longer(
     si,
     cols      = dplyr::all_of(prob_cols),
@@ -223,20 +300,17 @@ eDNA_dmm_structure <- function(
     labels = paste0("Community ", seq_len(K))
   )
   
-  # ── Titles ────────────────────────────────────────────────────────────────────
+  # ── Build plot ────────────────────────────────────────────────────────────────
   title_str    <- title    %||% sprintf("Posterior Community Assignments  (K = %d)", K)
   subtitle_str <- subtitle %||% sprintf(
     "%d samples  |  bar height = posterior membership probability", nrow(si)
   )
   
-  # ── Build plot ────────────────────────────────────────────────────────────────
-  p <- ggplot2::ggplot(
-    plot_long,
-    ggplot2::aes(x     = .data$x_pos,
-                 y     = .data$probability,
-                 fill  = .data$community)
-  ) +
-    ggplot2::geom_bar(stat = "identity", width = bar_width, position = "stack") +
+  p <- ggplot2::ggplot(plot_long,
+                       ggplot2::aes(x = .data$x_pos,
+                                    y = .data$probability,
+                                    fill = .data$community)) +
+    ggplot2::geom_bar(stat = "identity", width = bar_width) +
     ggplot2::scale_fill_manual(values = community_colors, name = NULL) +
     ggplot2::scale_x_continuous(expand = c(0, 0)) +
     ggplot2::scale_y_continuous(
@@ -264,8 +338,7 @@ eDNA_dmm_structure <- function(
   # ── X-axis labels ─────────────────────────────────────────────────────────────
   if (x_text) {
     p <- p + ggplot2::theme(
-      axis.text.x  = ggplot2::element_text(angle = 45, hjust = 1,
-                                           size = base_size - 3),
+      axis.text.x  = ggplot2::element_text(angle = 45, hjust = 1, size = base_size - 3),
       axis.ticks.x = ggplot2::element_line()
     )
   } else {
@@ -275,12 +348,37 @@ eDNA_dmm_structure <- function(
     )
   }
   
+  # ── Vertical reference line ───────────────────────────────────────────────────
+  if (!is.null(vline_df)) {
+    p <- p + ggplot2::geom_vline(
+      data        = vline_df,
+      ggplot2::aes(xintercept = .data$vline_x),
+      color       = vline_color,
+      linetype    = vline_linetype,
+      linewidth   = vline_linewidth,
+      inherit.aes = FALSE
+    )
+  }
+  
   # ── Faceting ──────────────────────────────────────────────────────────────────
-  # free_x: each panel has its own x scale (so x_pos 1..n per panel)
-  # space = "free_x": panel widths are proportional to number of samples
-  if (!is.null(facet_var)) {
+  if (!is.null(facet_row_var) && !is.null(facet_var)) {
+    # Two-dimensional grid: rows = facet_row_var, columns = facet_var
+    p <- p + ggplot2::facet_grid(
+      reformulate(facet_var, facet_row_var),
+      scales = "free_x",
+      space  = "free_x"
+    )
+  } else if (!is.null(facet_var)) {
+    # Original behaviour: single row of panels
     p <- p + ggplot2::facet_grid(
       reformulate(facet_var),
+      scales = "free_x",
+      space  = "free_x"
+    )
+  } else if (!is.null(facet_row_var)) {
+    # Rows only, no column facet
+    p <- p + ggplot2::facet_grid(
+      reformulate(".", facet_row_var),
       scales = "free_x",
       space  = "free_x"
     )
