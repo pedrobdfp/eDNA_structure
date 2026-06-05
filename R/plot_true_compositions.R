@@ -54,6 +54,7 @@ plot_true_compositions <- function(
     base_size        = 11,
     title            = NULL,
     subtitle         = NULL,
+    show_legend      = FALSE,
     legend_position  = "bottom",
     vline_var        = NULL,
     vline_value      = NULL,
@@ -210,7 +211,7 @@ plot_true_compositions <- function(
   
   # ── No row facet: single plot ──────────────────────────────────────────────
   if (is.null(facet_row_var)) {
-    p <- build_panel(si, show_legend = TRUE, show_title = TRUE)
+    p <- build_panel(si, show_legend = show_legend, show_title = TRUE)
     p <- p + ggplot2::labs(title = title_str, subtitle = subtitle_str,
                            y = "Species frequency")
     return(p)
@@ -233,20 +234,11 @@ plot_true_compositions <- function(
     build_panel(
       dat,
       row_label   = as.character(lv),
-      show_legend = (i == length(row_levels)),  # legend on last panel
+      show_legend = FALSE,
       show_title  = FALSE
     )
   })
   panels <- Filter(Negate(is.null), panels)
-  
-  # Shared legend from last panel
-  legend_grob <- cowplot::get_plot_component(
-    build_panel(si, show_legend = TRUE) +
-      ggplot2::theme(legend.position = "bottom") +
-      ggplot2::guides(fill = ggplot2::guide_legend(ncol = 5)),
-    "guide-box-bottom",
-    return_all = TRUE
-  )
   
   # Title row
   title_grob <- cowplot::ggdraw() +
@@ -255,14 +247,53 @@ plot_true_compositions <- function(
     cowplot::draw_label(subtitle_str, size = base_size - 1, color = "grey40",
                         x = 0.02, y = 0.25, hjust = 0)
   
-  cowplot::plot_grid(
-    title_grob,
-    cowplot::plot_grid(plotlist = panels, ncol = 1,
-                       labels = letters[seq_along(panels)], label_size = 14),
-    legend_grob,
-    ncol = 1,
-    rel_heights = c(0.06, 1, 0.12)
-  )
+  # Assemble with or without legend
+  stacked <- cowplot::plot_grid(plotlist = panels, ncol = 1,
+                                labels = letters[seq_along(panels)],
+                                label_size = 14)
+  
+  if (show_legend) {
+    # Extract legend from a dummy plot using the requested position
+    legend_plot <- build_panel(si, show_legend = TRUE) +
+      ggplot2::theme(legend.position = legend_position) +
+      ggplot2::guides(fill = ggplot2::guide_legend())
+    
+    if (legend_position == "right") {
+      # Legend to the right of the stacked panels
+      legend_grob <- cowplot::get_plot_component(legend_plot,
+                                                 "guide-box-right",
+                                                 return_all = TRUE)
+      inner <- cowplot::plot_grid(stacked, legend_grob,
+                                  nrow = 1, rel_widths = c(1, 0.2))
+      cowplot::plot_grid(title_grob, inner,
+                         ncol = 1, rel_heights = c(0.06, 1))
+      
+    } else if (legend_position == "left") {
+      legend_grob <- cowplot::get_plot_component(legend_plot,
+                                                 "guide-box-left",
+                                                 return_all = TRUE)
+      inner <- cowplot::plot_grid(legend_grob, stacked,
+                                  nrow = 1, rel_widths = c(0.2, 1))
+      cowplot::plot_grid(title_grob, inner,
+                         ncol = 1, rel_heights = c(0.06, 1))
+      
+    } else {
+      # bottom or top
+      legend_grob <- cowplot::get_plot_component(legend_plot,
+                                                 "guide-box-bottom",
+                                                 return_all = TRUE)
+      if (legend_position == "top") {
+        cowplot::plot_grid(title_grob, legend_grob, stacked,
+                           ncol = 1, rel_heights = c(0.06, 0.1, 1))
+      } else {
+        cowplot::plot_grid(title_grob, stacked, legend_grob,
+                           ncol = 1, rel_heights = c(0.06, 1, 0.1))
+      }
+    }
+  } else {
+    cowplot::plot_grid(title_grob, stacked,
+                       ncol = 1, rel_heights = c(0.06, 1))
+  }
 }
 
 `%||%` <- function(a, b) if (!is.null(a)) a else b
