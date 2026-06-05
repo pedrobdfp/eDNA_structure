@@ -344,6 +344,23 @@ p <- plot_true_compositions(
 Returns a `ggplot2` object.
 
 ---
+### eDNA_dmm_compositions() — Posterior community compositions
+Visualizes the posterior mean taxonomic composition of each latent community as stacked bars — the model's estimate of what each community "looks like" in species space. Colors match those used in eDNA_dmm_structure() and plot_true_compositions() for direct comparison.
+```r
+rp <- eDNA_dmm_compositions(
+  fit,
+  top_n           = 20,      # show top N taxa; rest collapsed to "Other"
+  base_size       = 13,
+  title           = NULL,
+  subtitle        = NULL,
+  legend_position = "right", # "right", "bottom", "left", "top", or "none"
+  bar_width       = 0.7      # bar width (0–1)
+)
+```
+
+Returns a ggplot2 object. The x-axis labels show community numbers (1, 2, 3…). Pair with eDNA_dmm_structure() to connect community identities to sample assignments.
+
+---
 
 ### `get_example_data()` — Built-in example dataset
 

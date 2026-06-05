@@ -133,6 +133,8 @@ eDNA_dmm_structure <- function(
                                      names_to = "community", values_to = "probability")
     plot_long$community <- factor(plot_long$community, levels = prob_cols,
                                   labels = paste0("Community ", seq_len(K)))
+    # ensure x_label factor levels are preserved after pivot
+    plot_long$x_label <- factor(plot_long$x_label, levels = levels(dat$x_label))
     
     p <- ggplot2::ggplot(
       plot_long,
