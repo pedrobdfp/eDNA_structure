@@ -13,3 +13,6 @@ inst/doc
 /*.tar.gz
 *.rdb
 *.rdx
+src/*.o
+src/*.dll
+src/*.so
