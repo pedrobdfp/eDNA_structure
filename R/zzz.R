@@ -1,5 +1,39 @@
 #' eDNA_structure: Dirichlet-Multinomial Mixture Models for eDNA Metabarcoding
 #'
+#' @description
+#' `eDNA_structure` fits Bayesian Dirichlet-Multinomial Mixture (DMM) models
+#' to eDNA read count data from metabarcoding surveys. The model simultaneously
+#' estimates:
+#'
+#' - How many latent ecological communities are present
+#' - The taxonomic composition (relative frequencies) of each community
+#' - How environmental covariates (depth, latitude, etc.) drive community membership
+#'
+#' Input can be raw ASV tables, taxonomically-annotated taxon tables, or
+#' any sample × feature count matrix.
+#'
+#' @section Core workflow:
+#' 1. **Fit the model**: [eDNA_dmm()]
+#' 2. **Visualize assignments**: [eDNA_dmm_structure()]
+#' 3. **Ordinate communities**: [eDNA_dmm_nmds()]
+#' 4. **Inspect covariate effects**: [eDNA_dmm_beta()]
+#' 5. **Get example data**: [get_example_data()]
+#'
+#' @section Getting started:
+#' ```r
+#' # Load example data and run a quick K=2 fit
+#' data <- get_example_data()
+#' fit  <- eDNA_dmm(counts = data$counts, covariates = data$covariates, K = 2)
+#' eDNA_dmm_structure(fit)
+#' ```
+#'
+#' @section Package philosophy:
+#' This package is designed to be approachable for users unfamiliar with
+#' Bayesian mixture models. All functions expose every relevant argument
+#' explicitly (no `...` pass-through), include informative error messages
+#' for common mistakes, and produce [ggplot2][ggplot2::ggplot2-package]
+#' objects that can be freely customized downstream.
+#'
 #' @docType package
 #' @name eDNA_structure-package
 #' @aliases eDNA_structure
@@ -26,20 +60,7 @@ NULL
 
 .onLoad <- function(libname, pkgname) {
   rstan::rstan_options(auto_write = TRUE)
-
-  modules <- paste0("stan_fit4", names(stanmodels), "_mod")
-
-  for (m in modules) {
-    tryCatch(
-      Rcpp::loadModule(m, what = FALSE),
-      error = function(e) {
-        packageStartupMessage(
-          "Note: Stan module '", m, "' could not be loaded automatically (",
-          conditionMessage(e), "). ",
-          "Model-fitting functions in this package may not work; ",
-          "all other functions are unaffected."
-        )
-      }
-    )
-  }
+  # Stan model is compiled lazily on first use of eDNA_dmm(), not here.
+  # See R/stanmodels.R (.get_dmm_stanmodel()) — this avoids any dependency
+  # on precompiled Rcpp Modules / RCPP_MODULE DLL export behavior.
 }

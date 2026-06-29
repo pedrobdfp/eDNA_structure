@@ -185,16 +185,16 @@ eDNA_dmm <- function(
     verbose         = TRUE
 ) {
   cl <- match.call()
-
+  
   # ── Input validation ────────────────────────────────────────────────────────
   counts     <- validate_counts(counts)
   K          <- validate_K(K, nrow(counts))
-
+  
   # Drop all-zero taxa silently after warning in validate_counts
   counts <- counts[, colSums(counts) > 0, drop = FALSE]
-
+  
   covariates <- validate_covariates(covariates, counts, scale_covariates)
-
+  
   # ── Argument checks ──────────────────────────────────────────────────────────
   if (!is.numeric(chains) || chains < 1 || chains != round(chains)) {
     rlang::abort("`chains` must be a positive integer.")
@@ -217,11 +217,11 @@ eDNA_dmm <- function(
   if (!is.numeric(alpha_rate) || alpha_rate <= 0) {
     rlang::abort("`alpha_rate` must be a positive number.")
   }
-
+  
   N <- nrow(counts)
   S <- ncol(counts)
   P <- ncol(covariates)
-
+  
   # ── Recover scaling info before we lose attributes ───────────────────────────
   scale_info <- NULL
   if (scale_covariates && P > 0) {
@@ -233,14 +233,14 @@ eDNA_dmm <- function(
     attr(covariates, "scale_center") <- NULL
     attr(covariates, "scale_scale")  <- NULL
   }
-
+  
   taxa_names      <- colnames(counts)
   covariate_names <- if (P > 0) colnames(covariates) else character(0)
   sample_ids      <- rownames(counts)
-
+  
   # ── Build Stan data list ─────────────────────────────────────────────────────
   cov_matrix <- if (P > 0) covariates else matrix(numeric(0), nrow = N, ncol = 0)
-
+  
   stan_data <- list(
     N           = N,
     S           = S,
@@ -252,10 +252,11 @@ eDNA_dmm <- function(
     alpha_shape = alpha_shape,
     alpha_rate  = alpha_rate
   )
-
-  # ── Fit using pre-compiled Stan model ────────────────────────────────────────
-  # stanmodels$dmm is compiled at install time via rstantools — no runtime
-  # compilation, no C++ output ever printed to the user.
+  
+  # ── Fit using lazily-compiled, disk-cached Stan model ────────────────────────
+  # .get_dmm_stanmodel() (see R/stanmodels.R) compiles the model from
+  # inst/stan/dmm.stan on first use and caches it to disk. No precompiled
+  # Rcpp Module is shipped in the package's compiled code.
   if (verbose) {
     message(sprintf(
       "Fitting DMM: N=%d samples, S=%d taxa, K=%d communities, P=%d covariates",
@@ -269,9 +270,9 @@ eDNA_dmm <- function(
       message("Note: Using single chain (recommended for mixture models; see ?eDNA_dmm).")
     }
   }
-
+  
   stan_fit <- rstan::sampling(
-    object  = stanmodels$dmm,
+    object  = .get_dmm_stanmodel(),
     data    = stan_data,
     chains  = chains,
     iter    = iter,
@@ -285,26 +286,26 @@ eDNA_dmm <- function(
       max_treedepth = max_treedepth
     )
   )
-
+  
   # ── Extract posterior summaries ───────────────────────────────────────────────
   n_post <- iter - warmup
-
+  
   cp_draws  <- rstan::extract(stan_fit, pars = "community_probs")$community_probs
   # cp_draws is [draws, N, K]; take chain 1 draws only (first n_post rows)
   cp_mean   <- apply(cp_draws[seq_len(n_post), , , drop = FALSE], c(2, 3), mean)
-
+  
   pi_draws  <- rstan::extract(stan_fit, pars = "pi")$pi
   # pi_draws is [draws, K, S]
   pi_mean   <- apply(pi_draws[seq_len(n_post), , , drop = FALSE], c(2, 3), mean)
   colnames(pi_mean) <- taxa_names
-
+  
   alpha_draws <- rstan::extract(stan_fit, pars = "alpha")$alpha
   alpha_mean  <- mean(alpha_draws[seq_len(n_post)])
-
+  
   # ── Sample assignment data frame ──────────────────────────────────────────────
   prob_df    <- as.data.frame(cp_mean)
   colnames(prob_df) <- paste0("prob_comm", seq_len(K))
-
+  
   sample_info <- data.frame(
     sample_id           = if (!is.null(sample_ids)) sample_ids else paste0("Sample_", seq_len(N)),
     stringsAsFactors    = FALSE
@@ -316,10 +317,10 @@ eDNA_dmm <- function(
     labels = paste0("Community ", seq_len(K))
   )
   sample_info$assignment_certainty <- apply(cp_mean, 1, max)
-
+  
   # ── Beta summaries ─────────────────────────────────────────────────────────────
   beta_summary <- .extract_beta_summary(stan_fit, K, P, covariate_names, n_post)
-
+  
   # ── Diagnostics summary ───────────────────────────────────────────────────────
   if (verbose) {
     rstan::check_hmc_diagnostics(stan_fit)
@@ -331,7 +332,7 @@ eDNA_dmm <- function(
     ))
     message(sprintf("Posterior mean alpha: %.2f", alpha_mean))
   }
-
+  
   # ── Return ─────────────────────────────────────────────────────────────────────
   structure(
     list(
@@ -359,13 +360,13 @@ eDNA_dmm <- function(
 #' @keywords internal
 .extract_beta_summary <- function(stan_fit, K, P, covariate_names, n_post) {
   if (K < 2) return(data.frame())
-
+  
   cov_labels <- c("intercept", covariate_names)
   n_beta_cols <- K - 1   # communities 1..(K-1) vs reference K
-
+  
   beta_mat <- as.matrix(stan_fit, pars = "beta")
   if (nrow(beta_mat) >= n_post) beta_mat <- beta_mat[seq_len(n_post), , drop = FALSE]
-
+  
   results <- vector("list", (K - 1) * (P + 1))
   idx <- 1L
   for (comm_i in seq_len(K - 1)) {
@@ -439,15 +440,15 @@ print.edna_dmm_fit <- function(x, ...) {
 summary.edna_dmm_fit <- function(object, ...) {
   cat("eDNA DMM — Fit Summary\n")
   cat("======================\n\n")
-
+  
   cat("Call:\n  ")
   print(object$call)
   cat("\n")
-
+  
   # Model dimensions
   cat(sprintf("Dimensions: N=%d samples, S=%d taxa, K=%d communities\n\n",
               object$N, object$S, object$K))
-
+  
   # Alpha (overdispersion)
   cat("Overdispersion (alpha):\n")
   alpha_draws <- rstan::extract(object$stan_fit, pars = "alpha")$alpha
@@ -457,7 +458,7 @@ summary.edna_dmm_fit <- function(object, ...) {
               stats::quantile(alpha_draws, 0.95)))
   cat("  (alpha >> 1: low overdispersion / near-multinomial;\n")
   cat("   alpha ~  1: high overdispersion / typical eDNA)\n\n")
-
+  
   # Assignment certainty
   cert <- object$sample_info$assignment_certainty
   cat("Assignment certainty across samples:\n")
@@ -465,7 +466,7 @@ summary.edna_dmm_fit <- function(object, ...) {
               mean(cert), min(cert), max(cert)))
   cat(sprintf("  Decisive (>=80%% certainty): %d/%d samples (%.0f%%)\n\n",
               sum(cert >= 0.8), object$N, 100 * mean(cert >= 0.8)))
-
+  
   # Beta summary (non-intercept terms only)
   if (nrow(object$beta_summary) > 0 && length(object$covariate_names) > 0) {
     beta_show <- object$beta_summary[object$beta_summary$covariate != "intercept", ]
@@ -482,11 +483,11 @@ summary.edna_dmm_fit <- function(object, ...) {
       cat("\n  Reliability: trustworthy (ESS>400), cautious (100-400), unreliable (<100)\n\n")
     }
   }
-
+  
   # HMC diagnostics
   cat("HMC Diagnostics:\n")
   rstan::check_hmc_diagnostics(object$stan_fit)
-
+  
   # ESS
   n_post   <- object$stan_data$K  # recover — actually use stored
   pi_mat   <- as.matrix(object$stan_fit, pars = "pi")
@@ -494,6 +495,6 @@ summary.edna_dmm_fit <- function(object, ...) {
   cat(sprintf("\nWithin-chain ESS (pi): min=%.0f, median=%.0f, max=%.0f\n",
               min(pi_ess), stats::median(pi_ess), max(pi_ess)))
   cat("  ESS > 400 = trustworthy; ESS 100-400 = cautious; ESS < 100 = unreliable\n")
-
+  
   invisible(object)
 }
