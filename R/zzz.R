@@ -62,7 +62,9 @@ NULL
   rstan::rstan_options(auto_write = TRUE)
 
   modules <- paste0("stan_fit4", names(stanmodels), "_mod")
+
   for (m in modules) {
+
     already_loaded <- tryCatch({
       Rcpp::Module(m, PACKAGE = pkgname)
       TRUE
