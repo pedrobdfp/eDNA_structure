@@ -60,6 +60,26 @@ NULL
 
 .onLoad <- function(libname, pkgname) {
   rstan::rstan_options(auto_write = TRUE)
+
   modules <- paste0("stan_fit4", names(stanmodels), "_mod")
-  for (m in modules) Rcpp::loadModule(m, what = TRUE)
+  for (m in modules) {
+    already_loaded <- tryCatch({
+      Rcpp::Module(m, PACKAGE = pkgname)
+      TRUE
+    }, error = function(e) FALSE)
+
+    if (!already_loaded) {
+      tryCatch(
+        Rcpp::loadModule(m, what = TRUE),
+        error = function(e) {
+          packageStartupMessage(
+            "Note: Stan module '", m, "' could not be loaded automatically (",
+            conditionMessage(e), "). ",
+            "Model-fitting functions in this package may not work; ",
+            "all other functions are unaffected."
+          )
+        }
+      )
+    }
+  }
 }
