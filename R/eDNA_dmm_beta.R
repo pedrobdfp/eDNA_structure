@@ -156,9 +156,6 @@ eDNA_dmm_beta <- function(
   }
   
   beta_mat    <- as.matrix(fit$stan_fit, pars = "beta")
-  n_post      <- fit$stan_data$K   # wrong — use actual chain length
-  # Recover n_post from the stan fit
-  n_post_real <- nrow(beta_mat)
 
   cov_labels  <- c("intercept", fit$covariate_names)
 
