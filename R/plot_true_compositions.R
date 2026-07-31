@@ -38,48 +38,66 @@
 #' @param vline_color Line color. Default `"black"`.
 #' @param vline_linetype Line type. Default `"dashed"`.
 #' @param vline_linewidth Line width. Default `0.7`.
-#'
+#' @param legend_nrow Number of legend rows, passed to `guide_legend()`.
+#'   Default `NULL` (ggplot chooses).
+#' @param legend_ncol Number of legend columns, passed to `guide_legend()`.
+#'   Default `NULL` (ggplot chooses).
+#' @param legend_key_size Size (cm) of each legend color swatch. Default `0.4`.
+#' @param legend_text_size Font size of legend labels. Default `NULL`
+#'   (inherits from `base_size`).
+#' @param row_label_fn Function applied to each `facet_row_var` level to
+#'   produce its display label — e.g. `function(x) paste0(x, " m")` for a
+#'   depth column, or `function(x) paste0("Year: ", x)` for year. This is
+#'   what makes the label text generalize across datasets: it's tied to
+#'   whatever `facet_row_var` means for your data.
+#'   Default `as.character` (just prints the raw value).
+#' @param row_label_position `"title"` (bold label above each row's panel,
+#'   default) or `"ylab"` (as the y-axis label, the old behavior).
 #' @return A ggplot2 object (no `facet_row_var`) or a cowplot grid object.
 #'
 #' @seealso [eDNA_dmm_structure()], [simulate_eDNA_survey()]
 #' @export
 plot_true_compositions <- function(
     counts,
-    metadata         = NULL,
-    sample_id_col    = "sample_id",
-    facet_var        = NULL,
-    facet_row_var    = NULL,
-    sort_var         = NULL,
-    top_n            = 20,
-    base_size        = 11,
-    title            = NULL,
-    subtitle         = NULL,
-    show_legend      = FALSE,
-    legend_position  = "bottom",
+    metadata           = NULL,
+    sample_id_col      = "sample_id",
+    facet_var          = NULL,
+    facet_row_var      = NULL,
+    sort_var           = NULL,
+    top_n              = 20,
+    base_size          = 11,
+    title              = NULL,
+    subtitle           = NULL,
+    show_legend        = FALSE,
+    legend_position    = "bottom",
+    legend_nrow        = NULL,
+    legend_ncol        = NULL,
+    legend_key_size    = 0.4,
+    legend_text_size   = NULL,
+    row_label_fn       = as.character,
+    row_label_position = c("title", "ylab"),
     vline_var        = NULL,
     vline_value      = NULL,
     vline_color      = "black",
     vline_linetype   = "dashed",
     vline_linewidth  = 0.7
 ) {
-  # ── Coerce to matrix ───────────────────────────────────────────────────────
+  row_label_position <- match.arg(row_label_position)
+  
   if (is.data.frame(counts)) counts <- as.matrix(counts)
   N          <- nrow(counts)
   S          <- ncol(counts)
   taxa_names <- if (!is.null(colnames(counts))) colnames(counts) else paste0("Sp_", seq_len(S))
   sample_ids <- if (!is.null(rownames(counts))) rownames(counts) else paste0("S", seq_len(N))
   
-  # ── Relative frequencies ──────────────────────────────────────────────────
   row_tots <- rowSums(counts)
   row_tots[row_tots == 0] <- 1
   freq_mat <- counts / row_tots
   
-  # ── Top N taxa ─────────────────────────────────────────────────────────────
   mean_freq  <- colMeans(freq_mat)
   top_taxa   <- names(sort(mean_freq, decreasing = TRUE))[seq_len(min(top_n, S))]
   other_taxa <- setdiff(taxa_names, top_taxa)
   
-  # ── Long data frame ────────────────────────────────────────────────────────
   plot_df <- as.data.frame(freq_mat)
   colnames(plot_df) <- taxa_names
   plot_df$sample_id <- sample_ids
@@ -91,7 +109,6 @@ plot_true_compositions <- function(
     plot_df <- plot_df[, c("sample_id", top_taxa)]
   }
   
-  # ── Merge metadata ─────────────────────────────────────────────────────────
   si <- plot_df
   if (!is.null(metadata)) {
     if (!sample_id_col %in% names(metadata))
@@ -99,7 +116,6 @@ plot_true_compositions <- function(
     si <- merge(si, metadata, by.x = "sample_id", by.y = sample_id_col, all.x = TRUE)
   }
   
-  # ── Colors — structured palette matching make_structured_colors() ──────────
   named_taxa <- sort(top_taxa)
   n_named    <- length(named_taxa)
   n_shades   <- ceiling(n_named / 7)
@@ -115,27 +131,17 @@ plot_true_compositions <- function(
   value_cols   <- c(top_taxa, if (length(other_taxa) > 0) "Other")
   taxon_levels <- c(sort(top_taxa), if (length(other_taxa) > 0) "Other")
   
-  # ── Titles ─────────────────────────────────────────────────────────────────
   title_str    <- title    %||% "Observed species composition"
   subtitle_str <- subtitle %||% sprintf("%d samples  |  top %d taxa shown individually",
                                         N, min(top_n, S))
   
-  # ── Core single-panel builder ──────────────────────────────────────────────
-  # Builds one ggplot for a given subset of si. This is called once per
-  # facet_row_var level (or once for the whole dataset if no row facet).
-  # x = reorder(sample_id, sort_var) makes x discrete and per-subset, which
-  # is the only reliable way to get gapless bars with proportional panel widths.
-  
   build_panel <- function(dat, row_label = NULL, show_legend = FALSE,
                           show_title = FALSE) {
-    # Sort within this subset
     if (!is.null(sort_var) && sort_var %in% names(dat)) {
       dat <- dat[order(dat[[sort_var]]), ]
     }
-    # Ordered factor — levels only from this subset so bars fill the panel
     dat$x_label <- factor(dat$sample_id, levels = unique(dat$sample_id))
     
-    # Vline: find position within each facet_var group
     vline_df <- NULL
     if (!is.null(vline_var) && !is.null(vline_value) && vline_var %in% names(dat)) {
       if (!is.null(facet_var) && facet_var %in% names(dat)) {
@@ -153,10 +159,12 @@ plot_true_compositions <- function(
       }
     }
     
-    # Pivot long
     plot_long <- tidyr::pivot_longer(dat, cols = dplyr::all_of(value_cols),
                                      names_to = "taxon", values_to = "frequency")
     plot_long$taxon <- factor(plot_long$taxon, levels = taxon_levels)
+    
+    panel_title <- if (!is.null(row_label) && row_label_position == "title") row_label else NULL
+    panel_ylab  <- if (!is.null(row_label) && row_label_position == "ylab")  row_label else "Proportion"
     
     p <- ggplot2::ggplot(
       plot_long,
@@ -167,25 +175,22 @@ plot_true_compositions <- function(
       ggplot2::scale_x_discrete(expand = c(0, 0)) +
       ggplot2::scale_y_continuous(labels = scales::percent, expand = c(0, 0),
                                   breaks = c(0, 0.5, 1)) +
-      ggplot2::labs(
-        x     = NULL,
-        y     = if (!is.null(row_label)) row_label else "Species frequency",
-        title = NULL
-      ) +
+      ggplot2::labs(x = NULL, y = panel_ylab, title = panel_title) +
+      ggplot2::guides(fill = ggplot2::guide_legend(nrow = legend_nrow, ncol = legend_ncol)) +
       ggplot2::theme_bw(base_size = base_size) +
       ggplot2::theme(
         legend.position  = if (show_legend) legend_position else "none",
+        legend.key.size  = ggplot2::unit(legend_key_size, "cm"),
+        legend.text      = if (!is.null(legend_text_size)) ggplot2::element_text(size = legend_text_size) else ggplot2::element_text(),
         axis.text.x      = ggplot2::element_blank(),
         axis.ticks.x     = ggplot2::element_blank(),
         strip.background = ggplot2::element_blank(),
         strip.text       = ggplot2::element_text(face = "bold"),
         panel.spacing.x  = ggplot2::unit(0.3, "lines"),
-        plot.title       = ggplot2::element_text(face = "bold"),
-        plot.subtitle    = ggplot2::element_text(color = "grey40",
-                                                 size = base_size - 2)
+        plot.title       = ggplot2::element_text(face = "bold", size = base_size, hjust = 0),
+        plot.subtitle    = ggplot2::element_text(color = "grey40", size = base_size - 2)
       )
     
-    # Vline
     if (!is.null(vline_df)) {
       p <- p + ggplot2::geom_vline(
         data        = vline_df,
@@ -197,27 +202,19 @@ plot_true_compositions <- function(
       )
     }
     
-    # Column facet
     if (!is.null(facet_var) && facet_var %in% names(dat)) {
-      p <- p + ggplot2::facet_grid(
-        reformulate(facet_var),
-        scales = "free_x",
-        space  = "free_x"
-      )
+      p <- p + ggplot2::facet_grid(reformulate(facet_var), scales = "free_x", space = "free_x")
     }
     
     p
   }
   
-  # ── No row facet: single plot ──────────────────────────────────────────────
   if (is.null(facet_row_var)) {
     p <- build_panel(si, show_legend = show_legend, show_title = TRUE)
-    p <- p + ggplot2::labs(title = title_str, subtitle = subtitle_str,
-                           y = "Species frequency")
+    p <- p + ggplot2::labs(title = title_str, subtitle = subtitle_str)
     return(p)
   }
   
-  # ── Row facet: one panel per level, assembled with cowplot ─────────────────
   if (!facet_row_var %in% names(si))
     rlang::abort(paste0("`facet_row_var = '", facet_row_var, "'` not found."))
   
@@ -231,69 +228,39 @@ plot_true_compositions <- function(
     lv  <- row_levels[i]
     dat <- si[si[[facet_row_var]] == lv, ]
     if (nrow(dat) == 0) return(NULL)
-    build_panel(
-      dat,
-      row_label   = as.character(lv),
-      show_legend = FALSE,
-      show_title  = FALSE
-    )
+    build_panel(dat, row_label = row_label_fn(lv), show_legend = FALSE, show_title = FALSE)
   })
   panels <- Filter(Negate(is.null), panels)
   
-  # Title row
   title_grob <- cowplot::ggdraw() +
-    cowplot::draw_label(title_str, fontface = "bold", size = base_size + 1,
-                        x = 0.02, hjust = 0) +
-    cowplot::draw_label(subtitle_str, size = base_size - 1, color = "grey40",
-                        x = 0.02, y = 0.25, hjust = 0)
+    cowplot::draw_label(title_str, fontface = "bold", size = base_size + 1, x = 0.02, hjust = 0) +
+    cowplot::draw_label(subtitle_str, size = base_size - 1, color = "grey40", x = 0.02, y = 0.25, hjust = 0)
   
-  # Assemble with or without legend
   stacked <- cowplot::plot_grid(plotlist = panels, ncol = 1,
-                                labels = letters[seq_along(panels)],
-                                label_size = 14)
+                                labels = letters[seq_along(panels)], label_size = 14)
   
   if (show_legend) {
-    # Extract legend from a dummy plot using the requested position
     legend_plot <- build_panel(si, show_legend = TRUE) +
-      ggplot2::theme(legend.position = legend_position) +
-      ggplot2::guides(fill = ggplot2::guide_legend())
+      ggplot2::theme(legend.position = legend_position)
     
     if (legend_position == "right") {
-      # Legend to the right of the stacked panels
-      legend_grob <- cowplot::get_plot_component(legend_plot,
-                                                 "guide-box-right",
-                                                 return_all = TRUE)
-      inner <- cowplot::plot_grid(stacked, legend_grob,
-                                  nrow = 1, rel_widths = c(1, 0.2))
-      cowplot::plot_grid(title_grob, inner,
-                         ncol = 1, rel_heights = c(0.06, 1))
-      
+      legend_grob <- cowplot::get_plot_component(legend_plot, "guide-box-right", return_all = TRUE)
+      inner <- cowplot::plot_grid(stacked, legend_grob, nrow = 1, rel_widths = c(1, 0.2))
+      cowplot::plot_grid(title_grob, inner, ncol = 1, rel_heights = c(0.06, 1))
     } else if (legend_position == "left") {
-      legend_grob <- cowplot::get_plot_component(legend_plot,
-                                                 "guide-box-left",
-                                                 return_all = TRUE)
-      inner <- cowplot::plot_grid(legend_grob, stacked,
-                                  nrow = 1, rel_widths = c(0.2, 1))
-      cowplot::plot_grid(title_grob, inner,
-                         ncol = 1, rel_heights = c(0.06, 1))
-      
+      legend_grob <- cowplot::get_plot_component(legend_plot, "guide-box-left", return_all = TRUE)
+      inner <- cowplot::plot_grid(legend_grob, stacked, nrow = 1, rel_widths = c(0.2, 1))
+      cowplot::plot_grid(title_grob, inner, ncol = 1, rel_heights = c(0.06, 1))
     } else {
-      # bottom or top
-      legend_grob <- cowplot::get_plot_component(legend_plot,
-                                                 "guide-box-bottom",
-                                                 return_all = TRUE)
+      guide_box_name <- if (legend_position == "top") "guide-box-top" else "guide-box-bottom"
+      legend_grob <- cowplot::get_plot_component(legend_plot, guide_box_name, return_all = TRUE)
       if (legend_position == "top") {
-        cowplot::plot_grid(title_grob, legend_grob, stacked,
-                           ncol = 1, rel_heights = c(0.06, 0.1, 1))
+        cowplot::plot_grid(title_grob, legend_grob, stacked, ncol = 1, rel_heights = c(0.06, 0.1, 1))
       } else {
-        cowplot::plot_grid(title_grob, stacked, legend_grob,
-                           ncol = 1, rel_heights = c(0.06, 1, 0.1))
+        cowplot::plot_grid(title_grob, stacked, legend_grob, ncol = 1, rel_heights = c(0.06, 1, 0.1))
       }
     }
   } else {
-    cowplot::plot_grid(title_grob, stacked,
-                       ncol = 1, rel_heights = c(0.06, 1))
+    cowplot::plot_grid(title_grob, stacked, ncol = 1, rel_heights = c(0.06, 1))
   }
 }
-
-`%||%` <- function(a, b) if (!is.null(a)) a else b

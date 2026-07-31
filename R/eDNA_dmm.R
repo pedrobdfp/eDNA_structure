@@ -489,7 +489,6 @@ summary.edna_dmm_fit <- function(object, ...) {
   rstan::check_hmc_diagnostics(object$stan_fit)
   
   # ESS
-  n_post   <- object$stan_data$K  # recover — actually use stored
   pi_mat   <- as.matrix(object$stan_fit, pars = "pi")
   pi_ess   <- posterior::ess_bulk(posterior::as_draws_matrix(pi_mat))
   cat(sprintf("\nWithin-chain ESS (pi): min=%.0f, median=%.0f, max=%.0f\n",
