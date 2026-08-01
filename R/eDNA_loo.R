@@ -14,6 +14,19 @@
 #' the point where additional communities yield diminishing LOO-ELPD gains —
 #' is a useful heuristic for choosing K.
 #'
+#' @section Replicated data:
+#' `eDNA_loo()` always uses the standard (summed) model — it has no `station_id`
+#' argument. This is deliberate. The replicate-aware model in [eDNA_dmm()] gives
+#' each station its own composition parameter `theta_i`, so holding a station out
+#' leaves that station's own parameter unidentified and station-level LOO is not
+#' well defined. It is also considerably slower, which matters when sweeping many
+#' values of K.
+#'
+#' The recommended workflow with replicated data is therefore: select K here on
+#' the summed model, then refit at the chosen K with `station_id` supplied to
+#' [eDNA_dmm()] for the final parameter estimates. If you have replicates, sum
+#' them per station for this step (e.g. `rowsum(rep_counts, station_id)`).
+#'
 #' @param counts A count matrix (same as passed to [eDNA_dmm()]).
 #' @param covariates A covariate matrix or data frame, or `NULL`.
 #' @param K_range An integer vector of K values to evaluate. Default is `2:5`.
@@ -172,8 +185,7 @@ eDNA_loo <- function(
 #' - **Values** = non-negative integer read counts
 #'
 #' If your count table is in long format (sample, taxon, count in three
-#' columns), convert it to wide format using [tidyr::pivot_wider()] or
-#' [reshape2::dcast()]:
+#' columns), convert it to wide format with [tidyr::pivot_wider()]:
 #' ```r
 #' library(tidyr)
 #' count_matrix <- pivot_wider(

@@ -91,6 +91,11 @@ fit <- eDNA_dmm(
 print(fit)
 summary(fit)
 
+# Have PCR / bottle replicates? Don't sum them — pass each replicate as its own
+# row and group them with station_id. See "Replicated samples" under Functions.
+# fit <- eDNA_dmm(rep_counts, station_id = station_id,
+#                 covariates = station_covs, K = 4)
+
 # Or select K using LOO cross-validation
 loo_result <- eDNA_loo(data$counts, data$covariates[, c("Depth", "Distance_shore")],
                        K_range = 2:5)
@@ -165,6 +170,25 @@ head(data$covariates)
 # 3   STN_003              2     11             197
 ```
 
+### Replicates (optional)
+
+If a station was sequenced more than once (PCR or bottle replicates), give each replicate its own row and use `station_id` to say which rows belong together. Do **not** sum them — see [Replicated samples](#replicated-samples--station_id) below for why.
+
+```r
+rep_counts[1:4, 1:4]
+#                 Sp_1  Sp_2  Sp_3  Sp_4
+# STN_001_B1       402   315   118    70
+# STN_001_B2       421   298   131    77
+# STN_002_B1       380   270   101    58
+# STN_002_B2       395   281    95    64
+
+station_id <- c("STN_001", "STN_001", "STN_002", "STN_002")
+```
+
+Covariates stay **station-level**: supply either one row per station (in order of first appearance in `station_id`) or one row per row of `counts`, in which case they are collapsed automatically. Replication may be ragged — stations can have different numbers of replicates, and stations with a single replicate are fully supported.
+
+Leave `station_id` unset if each row is an independent sample. That is the standard model and the right choice for unreplicated data.
+
 ---
 
 ## Functions
@@ -200,9 +224,52 @@ The returned `edna_dmm_fit` object contains:
 | `pi_mean` | Matrix [K × S]: posterior mean community compositions |
 | `beta_summary` | Data frame: covariate coefficient summaries with ESS and reliability |
 | `alpha_mean` | Scalar: posterior mean overdispersion |
+| `theta_mean` | Matrix [N × S]: posterior mean station compositions (replicate model only, else `NULL`) |
+| `phi_mean` | Scalar: posterior mean replicate dispersion (replicate model only, else `NULL`) |
 | `stan_fit` | Raw `rstan::stanfit` object for advanced diagnostics |
 
 > **On single chains:** Mixture models suffer from label switching across chains — "Community 1" in chain A may map to "Community 2" in chain B, making multi-chain Rhat diagnostics meaningless. A single long chain sidesteps this. Use within-chain ESS (reported by `summary()`) as your convergence criterion.
+
+---
+
+### Replicated samples — `station_id`
+
+If your stations have PCR or bottle replicates, pass each replicate as its own row of `counts` and use `station_id` to group them. This switches `eDNA_dmm()` to a hierarchical model that estimates each station's own composition:
+
+```
+theta_i ~ Dirichlet(alpha * pi_k)                      # the station's true composition
+y_ir    ~ DirichletMultinomial(N_ir, phi * theta_i)    # each replicate
+```
+
+There are then two dispersion parameters answering two different questions:
+
+| Parameter | Meaning |
+|-----------|---------|
+| `alpha` | How tightly **stations** cluster around their community composition (same as in the standard model) |
+| `phi` | How tightly **replicates** cluster around their own station — replicate reproducibility |
+
+```r
+fit <- eDNA_dmm(
+  counts     = rep_counts,        # one row per replicate
+  station_id = station_id,        # which rows belong to the same station
+  covariates = station_covs,      # station-level covariates
+  K          = 4,
+  phi_shape  = 2,                 # Gamma prior on phi (default mean 100)
+  phi_rate   = 0.02
+)
+
+fit$theta_mean   # [N stations × S taxa] posterior mean station compositions
+fit$phi_mean     # posterior mean replicate reproducibility
+```
+
+**Why not just sum the replicates?** Summing would be lossless if replicates were plain multinomial draws from the station's composition — their sum is a sufficient statistic, and integrating the station composition out gives you back exactly the standard model. Replicates are informative *precisely because* they are overdispersed relative to multinomial (PCR jackpotting, uneven template, bottle effects). Replicate concordance versus scatter is the signal, and summing discards it.
+
+Practical notes:
+
+- **Ragged replication is fine.** Stations may have different numbers of replicates. A station with only one replicate is still fitted normally — its `theta_i` is informed by that replicate plus shrinkage toward `alpha * pi_k`, using a `phi` learned from the replicated stations.
+- **Unreplicated data is unaffected.** If no station has more than one replicate, `alpha` and `phi` are not separately identified and the replicate model would buy you nothing, so `eDNA_dmm()` uses the standard model instead and tells you. Leaving `station_id` unset is always the right choice when each row is an independent sample.
+- **`sample_info` is still one row per station**, so `eDNA_dmm_structure()`, `eDNA_dmm_nmds()` and `eDNA_dmm_beta()` all work unchanged.
+- **K selection stays on the standard model.** `eDNA_loo()` deliberately uses the summed model: with a per-station `theta_i`, holding out a station leaves its own parameter unidentified, so station-level LOO is not well defined. The replicate model is slower too, which matters when sweeping many K values.
 
 ---
 

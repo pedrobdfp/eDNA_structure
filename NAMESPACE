@@ -2,6 +2,7 @@
 
 S3method(print, edna_dmm_fit)
 S3method(summary, edna_dmm_fit)
+export(eDNA_clear_stan_cache)
 export(eDNA_dmm)
 export(eDNA_dmm_beta)
 export(eDNA_dmm_compositions)

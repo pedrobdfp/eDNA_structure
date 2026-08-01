@@ -408,6 +408,204 @@ fit4$alpha_mean
 
 ---
 
+# Replicated samples
+
+Everything so far assumed one row of `counts` per station. Many eDNA designs
+instead sequence each station more than once — PCR replicates, or separate
+bottles filtered from the same water. The usual workaround is to sum a station's
+replicates into a single row. This section covers why that loses information and
+what to do instead.
+
+## Why summing replicates is not harmless
+
+Suppose each station has a true composition `theta_i`, and its replicates are
+draws from it. If those draws were plain **multinomial**, then summing would cost
+you nothing at all: the sum of multinomial draws is a sufficient statistic for
+`theta_i`, and if you write down the hierarchical model and integrate `theta_i`
+out analytically, you recover *exactly* the standard model applied to the summed
+counts. Adding a replicate layer in that world would change nothing.
+
+Replicates are informative precisely because they are **overdispersed** relative
+to multinomial. PCR jackpotting, uneven template concentration and bottle effects
+all make two replicates of the same water scatter more than multinomial sampling
+alone predicts. That scatter — how much replicates of a station agree with each
+other — is real information about assay reproducibility, and summing throws it
+away.
+
+So the replicate model keeps replicates as separate observations and adds a
+genuine hierarchical layer:
+
+```
+theta_i ~ Dirichlet(alpha * pi_k)                      # station's true composition
+y_ir    ~ DirichletMultinomial(N_ir, phi * theta_i)    # each replicate
+```
+
+This gives two dispersion parameters answering two different questions:
+
+| Parameter | Question it answers |
+|-----------|---------------------|
+| `alpha`   | How tightly do **stations** cluster around their community's composition? |
+| `phi`     | How tightly do **replicates** cluster around their own station? |
+
+In the summed model there is only `alpha`, and it is forced to absorb both.
+
+## Simulating a replicated survey
+
+The simulation pipeline already generates replicate-level reads — `bio_reps`
+controls biological (bottle) replicates and `seq_reps` sequencing replicates. The
+`counts` matrix it returns is the *summed* version, but the un-summed reads are
+kept in `metab_df`.
+
+```{r sim_reps}
+sim_rep <- simulate_eDNA_survey(
+  n_communities         = 4,
+  n_species             = 40,
+  samples_per_community = 5,
+  bio_reps              = 3,      # three bottle replicates per station
+  seq_reps              = 1,
+  mean_read_depth       = 10000,
+  spillover             = 0.15,
+  seed                  = 2026
+)
+
+# The summed matrix: one row per station
+dim(sim_rep$counts)
+
+# The un-summed reads: one row per (station, bio rep, seq rep, species)
+head(sim_rep$metab_df)
+```
+
+## Reshaping replicates into model input
+
+The model wants one row of `counts` per replicate, plus a `station_id` vector
+saying which rows belong together.
+
+```{r reshape_reps}
+library(tidyr)
+
+rep_long <- sim_rep$metab_df
+rep_long$station <- paste0("STN_", sprintf("%03d", rep_long$SampleID))
+rep_long$rep_key <- paste0(rep_long$station, "_B", rep_long$BioRep,
+                           "_S", rep_long$SeqRep)
+
+rep_wide <- pivot_wider(
+  rep_long[, c("rep_key", "station", "Species", "Counts")],
+  names_from  = "Species",
+  values_from = "Counts",
+  values_fill = 0L
+)
+
+station_id <- rep_wide$station
+rep_counts <- as.matrix(rep_wide[, !(names(rep_wide) %in% c("rep_key", "station"))])
+rownames(rep_counts) <- rep_wide$rep_key
+
+# Three rows per station instead of one
+dim(rep_counts)
+head(station_id, 6)
+```
+
+Covariates stay **station-level** — one row per station, in order of first
+appearance in `station_id`. (You may also pass one row per replicate; identical
+rows within a station are collapsed automatically, and a covariate that actually
+varies between replicates is an error, since the model has no replicate-level
+covariate term.)
+
+```{r reps_covariates}
+station_levels <- unique(station_id)
+station_cov <- sim_rep$covariates[
+  match(station_levels, sim_rep$covariates$sample_id),
+  c("Depth", "Distance_shore")
+]
+nrow(station_cov)   # one row per station
+```
+
+## Fitting the replicate model
+
+Passing `station_id` is the only change:
+
+```{r fit_reps, cache=TRUE}
+fit_rep <- eDNA_dmm(
+  counts     = rep_counts,
+  station_id = station_id,     # <- this switches on the hierarchical model
+  covariates = station_cov,
+  K          = 4,
+  chains     = 1,
+  iter       = 10000,
+  warmup     = 5000,
+  seed       = 13
+)
+
+print(fit_rep)
+```
+
+The new outputs are the station compositions and the replicate dispersion:
+
+```{r reps_outputs}
+# Posterior mean composition of each station: [N stations x S taxa]
+dim(fit_rep$theta_mean)
+round(fit_rep$theta_mean[1:3, 1:5], 4)
+
+# Rows are compositions, so they sum to 1
+range(rowSums(fit_rep$theta_mean))
+
+# Replicate reproducibility. Large phi = replicates of a station agree closely.
+fit_rep$phi_mean
+
+# Station-level dispersion, same meaning as in the standard model
+fit_rep$alpha_mean
+```
+
+`sample_info` still has one row per **station**, so every plotting function works
+exactly as before:
+
+```{r reps_plot, fig.width=9, fig.height=4}
+eDNA_dmm_structure(
+  fit_rep,
+  metadata      = sim_rep$covariates,
+  sample_id_col = "sample_id",
+  sort_var      = "Depth"
+)
+```
+
+## What if only some stations have replicates?
+
+Ragged replication is fully supported and is the common real-world case: often
+only a QC subset gets replicated. Stations with several replicates are what
+identify `phi`; that estimate is then applied to the singleton stations, whose
+`theta_i` is informed by their one replicate plus shrinkage toward
+`alpha * pi_k`. Singleton stations are not dropped or penalized — this is
+ordinary partial pooling.
+
+If only a handful of stations are replicated, `eDNA_dmm()` says so, because `phi`
+will then lean heavily on its prior. That is a note, not a problem.
+
+If **no** station has more than one replicate, `alpha` and `phi` cannot be told
+apart — both would be explaining a single layer of scatter. In that case the
+replicate model buys you nothing, because with one replicate per station the
+summed model *is* the correct model. `eDNA_dmm()` detects this and simply uses
+the standard model, telling you it did:
+
+```{r reps_fallback, eval=FALSE}
+# Every station has exactly one replicate -> falls back automatically
+fit <- eDNA_dmm(counts, station_id = rownames(counts), covariates = cov_matrix, K = 4)
+#> Every station in `station_id` has exactly 1 replicate.
+#> Using the standard model, which is the correct model for unreplicated data.
+```
+
+So if your data are unreplicated, just leave `station_id` unset. That is the
+standard, fully identified model and the right choice.
+
+## Prior on `phi`
+
+`phi` has a Gamma prior controlled by `phi_shape` and `phi_rate`, defaulting to
+shape 2 and rate 0.02 — a diffuse prior with mean 100. That mean is deliberately
+much larger than the prior mean for `alpha` (2.5), because replicates of one
+station are usually far more similar to each other than different stations are.
+If your assay is unusually noisy or unusually reproducible, adjust these and
+check that the posterior has moved away from the prior.
+
+---
+
 # Selecting K: how many communities?
 
 In practice, K is rarely known in advance. The standard approach is to fit
@@ -419,6 +617,15 @@ the training data better but may overfit.
 `eDNA_loo()` fits the model for each K in `K_range` and compares ELPD
 (expected log predictive density) across K values. Higher ELPD = better
 predictive performance. Look for the "elbow" where gains flatten.
+
+> **With replicated data:** `eDNA_loo()` always uses the standard summed model
+> and has no `station_id` argument. This is deliberate — the replicate model
+> gives each station its own `theta_i`, so holding a station out leaves that
+> station's own parameter unidentified and station-level LOO is not well defined.
+> It is also much slower, which matters when sweeping many K values. The
+> recommended workflow is: select K here on the summed counts
+> (`rowsum(rep_counts, station_id)`), then refit once at the chosen K with
+> `station_id` supplied for your final estimates.
 
 ```{r loo, cache=TRUE}
 loo_result <- eDNA_loo(
@@ -917,6 +1124,29 @@ beta_result$table[, c("community", "covariate", "mean", "ci_5", "ci_95",
                        "prob_positive", "reliability")]
 ```
 
+## Phi (replicate dispersion) recovery
+
+For the replicate model, check that `phi` has actually been informed by the data
+rather than sitting on its prior (Gamma(2, 0.02), mean 100). A posterior that is
+clearly tighter than the prior, and centered somewhere other than 100, means the
+replicates carried real information about reproducibility.
+
+```{r verify_phi}
+phi_draws <- rstan::extract(fit_rep$stan_fit, pars = "phi")$phi
+
+hist(phi_draws, breaks = 40, freq = FALSE,
+     main = "Posterior vs prior for replicate dispersion (phi)",
+     xlab = "phi", col = "steelblue", border = "white")
+curve(dgamma(x, shape = 2, rate = 0.02), add = TRUE,
+      col = "firebrick", lwd = 2, lty = 2)
+legend("topright", legend = c("Posterior", "Prior Gamma(2, 0.02)"),
+       col = c("steelblue", "firebrick"), lty = c(1, 2), lwd = 2, bty = "n")
+
+# phi should be well separated from alpha: replicates of one station agree far
+# more closely than different stations do.
+c(alpha = fit_rep$alpha_mean, phi = fit_rep$phi_mean)
+```
+
 ---
 
 # Working with real data
@@ -957,6 +1187,24 @@ loo_result$loo_table
 # 7. Extract the chosen K from LOO results — no refitting needed
 K_best <- 4   # update based on LOO elbow
 fit <- loo_result$fits[[paste0("K", K_best)]]
+
+# 7b. ONLY IF you have PCR / bottle replicates: refit once at the chosen K with
+#     each replicate as its own row, instead of summing them. Steps 1-7 above use
+#     the summed counts; this step recovers the replicate-level information.
+#     Skip this entirely if each row is an independent sample — the fit from
+#     step 7 is already the correct model for unreplicated data.
+#
+#     rep_counts : one row per replicate (samples x taxa)
+#     station_id : which station each row belongs to; length = nrow(rep_counts)
+#     station_cov: one row per station, in order of first appearance
+fit <- eDNA_dmm(
+  counts     = rep_counts,
+  station_id = station_id,
+  covariates = station_cov,
+  K          = K_best
+)
+fit$theta_mean   # each station's own estimated composition
+fit$phi_mean     # replicate reproducibility
 
 # 8. Visualize
 p_raw    <- plot_true_compositions(counts, metadata = metadata,
@@ -1017,6 +1265,13 @@ likelihood, which scales with sample size and K. Practical strategies:
   the dominant signal
 - For LOO with K_range = 2:6, plan for roughly 20–40 minutes per K value on a
   modern laptop
+
+The replicate model (`station_id` supplied) is meaningfully more expensive: its
+likelihood cost scales with the total number of *replicate rows* rather than
+stations, and it adds N x (S-1) station-composition parameters. Keep K selection
+on the summed model with `eDNA_loo()` and fit the replicate model once, at the
+chosen K. If it is still too slow, reducing S by taxon filtering helps most,
+since the added parameter count is proportional to S.
 
 ## Function not found after installation
 
