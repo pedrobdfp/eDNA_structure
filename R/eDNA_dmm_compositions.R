@@ -21,6 +21,37 @@
 #'
 #' @return A [ggplot2::ggplot()] object.
 #'
+#' Rank taxa by their weight in a fitted model
+#'
+#' @description
+#' Returns taxa ordered by total posterior weight across communities,
+#' `colSums(pi_mean)`. A taxon that dominates a single community ranks highly
+#' even if it is rare overall, which is the ordering that matters when the
+#' question is what distinguishes communities from one another.
+#'
+#' This is deliberately NOT the same ranking as mean observed frequency across
+#' samples, which rewards being widespread instead. Use this function to drive
+#' BOTH [eDNA_dmm_compositions()] and [plot_true_compositions()] when the two
+#' figures sit side by side, because the taxon palette is a deterministic
+#' function of the sorted taxon set: same set in, same colours out. Selecting
+#' the two sets independently gives two different palettes, and shared taxa
+#' then appear in different colours in the two panels.
+#'
+#' @param fit An `edna_dmm_fit` object from [eDNA_dmm()].
+#' @param top_n Number of taxa to return. `NULL` (default) returns all of them,
+#'   ranked.
+#' @return A character vector of taxon names, highest weight first.
+#' @seealso [eDNA_dmm_compositions()], [plot_true_compositions()]
+#' @export
+dmm_taxon_order <- function(fit, top_n = NULL) {
+  check_stan_fit_object(fit, "dmm_taxon_order")
+  pi_mean    <- fit$pi_mean
+  taxa_names <- colnames(pi_mean) %||% paste0("Sp_", seq_len(ncol(pi_mean)))
+  colnames(pi_mean) <- taxa_names
+  ranked <- names(sort(colSums(pi_mean), decreasing = TRUE))
+  if (is.null(top_n)) ranked else ranked[seq_len(min(top_n, length(ranked)))]
+}
+
 #' @seealso [plot_true_compositions()], [eDNA_dmm_structure()]
 #' @export
 eDNA_dmm_compositions <- function(
@@ -41,25 +72,18 @@ eDNA_dmm_compositions <- function(
   if (is.null(taxa_names))
     taxa_names <- paste0("Sp_", seq_len(ncol(pi_mean)))
   
-  # ── Top N taxa ─────────────────────────────────────────────────────────────
-  # Use total weight across communities to pick top taxa — same logic as
-  # plot_true_compositions() so colors stay consistent.
-  taxon_totals <- colSums(pi_mean)
-  top_taxa     <- names(sort(taxon_totals, decreasing = TRUE))[seq_len(min(top_n, ncol(pi_mean)))]
-  other_taxa   <- setdiff(taxa_names, top_taxa)
+  # ── Which taxa to show ─────────────────────────────────────────────────────
+  # Ranked by total posterior weight across communities. To make a companion
+  # plot_true_compositions() figure use the SAME colours, pass this same set to
+  # its `taxa_include` argument — see dmm_taxon_order().
+  top_taxa   <- dmm_taxon_order(fit, top_n)
+  other_taxa <- setdiff(taxa_names, top_taxa)
   
   # ── Structured color palette — identical to plot_true_compositions() ───────
   named_taxa <- sort(top_taxa)
   n_named    <- length(named_taxa)
-  n_shades   <- ceiling(n_named / 7)
-  base_hues  <- seq(15, 375, length.out = 8)[1:7]
-  lum_vals   <- seq(75, 40, length.out = n_shades)
-  color_grid <- outer(lum_vals, base_hues,
-                      function(l, h) grDevices::hcl(h = h, c = 80, l = l))
-  tax_colors <- c(
-    stats::setNames(as.vector(color_grid)[seq_len(n_named)], named_taxa),
-    if (length(other_taxa) > 0) c(Other = "grey70") else NULL
-  )
+  tax_colors <- make_taxa_colors(named_taxa,
+                                 include_other = length(other_taxa) > 0)
   
   taxon_levels <- c(sort(top_taxa), if (length(other_taxa) > 0) "Other")
   

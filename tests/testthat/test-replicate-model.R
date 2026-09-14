@@ -133,7 +133,7 @@ test_that("replicate rows from metab_df sum to the collapsed count matrix", {
 
   sim <- simulate_eDNA_survey(
     n_communities         = 2,
-    n_species             = 6,
+    n_species             = 20,
     samples_per_community = 3,
     bio_reps              = 3,
     seq_reps              = 1,
@@ -183,7 +183,7 @@ skip_unless_slow <- function() {
 test_that("eDNA_dmm() falls back to the standard model when nothing is replicated", {
   skip_unless_slow()
 
-  sim <- simulate_eDNA_survey(n_communities = 2, n_species = 6,
+  sim <- simulate_eDNA_survey(n_communities = 2, n_species = 20,
                               samples_per_community = 4, seed = 7)
   cov <- sim$covariates[, c("Depth", "Distance_shore")]
 
@@ -205,7 +205,7 @@ test_that("eDNA_dmm() fits the replicate model and returns station compositions"
   skip_if_not_installed("tidyr")
 
   sim <- simulate_eDNA_survey(
-    n_communities = 2, n_species = 6, samples_per_community = 4,
+    n_communities = 2, n_species = 20, samples_per_community = 4,
     bio_reps = 3, mean_read_depth = 2000, seed = 11
   )
 

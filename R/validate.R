@@ -197,7 +197,7 @@ validate_covariates <- function(covariates, counts, scale_covariates,
     rlang::abort(
       c(
         paste0("`covariates` has ", nrow(covariates), " rows but ", N, " were expected."),
-        i = "Both must have one row per sample, in the same order.",
+        i = "`covariates` and the samples being modelled must have the same number of rows, one per sample, in the same order.",
         i = "Check that you haven't filtered one object without filtering the other."
       ),
       call = call
@@ -561,16 +561,42 @@ make_community_colors <- function(k) {
            paste0("Community ", seq_len(k)))
 }
 
+#' Structured taxon palette: hue families, shaded within each
+#'
+#' Taxa are sorted and then laid out hue block by hue block, so neighbouring
+#' names share a hue and differ in lightness. That is what lets a legend of
+#' thirty-odd taxa be read as a handful of colour families rather than as
+#' thirty arbitrary swatches.
+#'
+#' Counts are spread across ALL `n_hues` hues before any shading is added.
+#' The earlier version built a shades-by-hues grid and read it column-major,
+#' which meant a taxon count that the first few hues could absorb left the
+#' last hue unused: 30 taxa became six hues of five shades and the seventh
+#' hue, the pink one, never appeared in any figure.
+#'
+#' @param taxa Character vector of taxon names. `"Other"` is ignored here and
+#'   appended as grey by `include_other`.
+#' @param n_hues Number of hue families. Default `7`.
+#' @param include_other Append `Other = "grey70"`. Default `TRUE`.
+#' @return A named character vector of colours.
 #' @keywords internal
-make_taxa_colors <- function(taxa) {
+make_taxa_colors <- function(taxa, n_hues = 7, include_other = TRUE) {
+  other <- if (isTRUE(include_other)) c("Other" = "grey70") else NULL
   taxa_sorted <- sort(taxa[taxa != "Other"])
-  n           <- length(taxa_sorted)
-  if (n == 0) return(c("Other" = "grey70"))
-  n_shades   <- ceiling(n / 7)
-  base_hues  <- seq(15, 375, length.out = 8)[seq_len(7)]
-  lum_vals   <- seq(75, 40, length.out = n_shades)
-  color_grid <- outer(lum_vals, base_hues,
-                      function(l, h) grDevices::hcl(h = h, c = 80, l = l))
-  c(setNames(as.vector(color_grid)[seq_len(n)], taxa_sorted),
-    "Other" = "grey70")
+  n <- length(taxa_sorted)
+  if (n == 0) return(other)
+
+  n_hues    <- min(n_hues, n)
+  base_hues <- seq(15, 375, length.out = n_hues + 1)[seq_len(n_hues)]
+  # Even split of n taxa over n_hues hues, e.g. 30 over 7 gives 5,4,5,4,4,4,4.
+  per_hue   <- diff(round(seq(0, n, length.out = n_hues + 1)))
+
+  cols <- unlist(lapply(seq_len(n_hues), function(j) {
+    k <- per_hue[[j]]
+    if (k == 0) return(character(0))
+    lum <- if (k == 1) 58 else seq(75, 40, length.out = k)
+    grDevices::hcl(h = base_hues[[j]], c = 80, l = lum)
+  }))
+
+  c(stats::setNames(cols[seq_len(n)], taxa_sorted), other)
 }
