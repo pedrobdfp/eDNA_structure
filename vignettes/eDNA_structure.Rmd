@@ -111,6 +111,64 @@ library(eDNAstructure)
 
 Before fitting a model, it helps to understand exactly what format the
 functions expect. We will use the built-in example dataset to illustrate.
+The model needs **two things**, and only the first is required:
+
+1. **A species/ASV × site table** — the count matrix.
+2. **A covariate table** — *optional*. Supply it only if you want to model how
+   environmental variables drive community membership. `eDNA_dmm()` runs
+   perfectly well without one.
+
+## Starting from one file
+
+In practice your data usually arrive as a single spreadsheet with sample IDs,
+environmental variables and counts all side by side. A file of exactly that
+shape ships with the package, so the split is easy to see:
+
+```{r raw_file}
+path <- system.file("extdata", "example_edna_raw.csv", package = "eDNAstructure")
+raw  <- read.csv(path, check.names = FALSE)
+
+raw[1:3, 1:7]
+```
+
+Split it into the two tables the model wants:
+
+```{r raw_split}
+# Which columns hold taxa? Adjust this one line to match your own file --
+# a name prefix, a known column range, or setdiff() against your metadata names.
+taxon_cols <- grep("^Sp_", names(raw))
+
+# 1. THE SPECIES/ASV x SITE TABLE -- required
+counts <- as.matrix(raw[, taxon_cols])
+rownames(counts) <- raw$sample_id
+storage.mode(counts) <- "integer"
+
+# 2. THE COVARIATE TABLE -- optional, numeric columns only
+covariates <- raw[, c("Depth", "Distance_shore")]
+rownames(covariates) <- raw$sample_id
+
+dim(counts)
+dim(covariates)
+```
+
+Both fits are valid:
+
+```{r raw_split_fit, eval=FALSE}
+fit <- eDNA_dmm(counts, K = 4)                           # without covariates
+fit <- eDNA_dmm(counts, covariates = covariates, K = 4)  # with them
+```
+
+> **The covariate table must be numeric, and only numeric.** `eDNA_dmm()` fits
+> every column you hand it, so an identifier such as `sample_id`, or a label
+> such as `TrueCommunity`, must not be in it — the model would try to fit the
+> ID as an environmental gradient. Keep those in a separate metadata frame and
+> pass it to the plotting functions' `metadata` argument instead. This is why
+> `get_example_data()` returns `covariates` and `metadata` as two objects.
+
+A replicated version, one row per bottle plus a `station_id` column, is in
+`example_edna_replicates_raw.csv` in the same folder. See *Replicated samples*
+below.
+
 
 ## The count matrix
 
@@ -167,7 +225,7 @@ probability that a sample belongs to each community.
 
 ```{r covariates}
 # Inspect the covariate data frame
-head(data$covariates)
+head(data$covariates)   # numeric only
 ```
 
 ```
@@ -188,7 +246,7 @@ A safe way to ensure alignment is to match on sample IDs:
 ```{r align}
 # Ensure both objects are sorted by sample ID before fitting
 counts_sorted     <- data$counts[order(rownames(data$counts)), ]
-covariates_sorted <- data$covariates[order(data$covariates$sample_id), ]
+metadata_sorted   <- data$metadata[order(data$metadata$sample_id), ]
 
 # Verify alignment
 stopifnot(all(rownames(counts_sorted) == covariates_sorted$sample_id))
@@ -244,7 +302,7 @@ distinct communities?"
 
 ```{r fit_k2}
 # Select which covariates to use
-covariate_matrix <- data$covariates[, c("Depth", "Distance_shore")]
+covariate_matrix <- data$covariates   # already numeric-only
 
 # Fit a K=2 DMM
 fit_k2 <- eDNA_dmm(
@@ -491,7 +549,7 @@ eDNA_dmm_structure(fit)
 # Faceted by true community, sorted by depth within each panel
 p_structure <- eDNA_dmm_structure(
   fit,
-  metadata  = data$covariates,   # pass your metadata data frame
+  metadata  = data$metadata,     # labelling columns, not the model covariates
   facet_var = "TrueCommunity",   # one panel per true community
   sort_var  = "Depth"            # sort samples by depth within each panel
 )
@@ -509,7 +567,7 @@ dominated by a single colour.
 # Use custom community colors
 p_structure_custom <- eDNA_dmm_structure(
   fit,
-  metadata         = data$covariates,
+  metadata         = data$metadata,
   facet_var        = "TrueCommunity",
   sort_var         = "Depth",
   community_colors = c(
@@ -686,7 +744,7 @@ combined freely. Here is an example using `cowplot`:
 install.packages("cowplot")
 library(cowplot)
 
-p1 <- eDNA_dmm_structure(fit, metadata = data$covariates,
+p1 <- eDNA_dmm_structure(fit, metadata = data$metadata,
                           facet_var = "TrueCommunity", sort_var = "Depth")
 p2 <- eDNA_dmm_nmds(fit)$plot
 p3 <- eDNA_dmm_beta(fit)$plot

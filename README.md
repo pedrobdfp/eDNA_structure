@@ -60,70 +60,86 @@ Installed automatically:
 
 ```r
 library(eDNAstructure)
-library(dplyr)    # for pipe and data manipulation
-library(ggplot2)  # for plot customization
 
-# Option A — use the built-in example dataset
+# The built-in example: a site-by-taxon count table plus two numeric covariates
 data <- get_example_data()
 
-# Option B — simulate your own dataset with known ground truth
-data <- simulate_eDNA_survey(
-  n_communities         = 4,
-  n_species             = 40,
-  samples_per_community = 5,
-  seed                  = 2026
-)
+data$counts[1:3, 1:5]   # 20 sites x 33 taxa — this is all the model needs
+head(data$covariates)   # Depth, Distance_shore (numeric only)
 
-# Inspect raw species composition before fitting
+# Look at the raw composition before fitting anything
 plot_true_compositions(
   data$counts,
-  metadata  = data$covariates,
+  metadata  = data$metadata,      # labelling columns live here
   facet_var = "TrueCommunity"
 )
 
-# Fit the model with a given number of communities (K)
+# Fit the model for a given number of communities (K)
 fit <- eDNA_dmm(
   counts     = data$counts,
-  covariates = data$covariates[, c("Depth", "Distance_shore")],
+  covariates = data$covariates,   # goes in as-is, nothing to subset
   K          = 4
 )
 
 print(fit)
 summary(fit)
 
-# Have PCR / bottle replicates? Don't sum them — pass each replicate as its own
-# row and group them with station_id. See "Replicated samples" under Functions.
-# fit <- eDNA_dmm(rep_counts, station_id = station_id,
-#                 covariates = station_covs, K = 4)
-
-# Or select K using LOO cross-validation
-loo_result <- eDNA_loo(data$counts, data$covariates[, c("Depth", "Distance_shore")],
-                       K_range = 2:5)
-loo_result$plot
-
-
-# The loo_result object stores all fitted models — no need to refit
-# Extract the K=4 model directly:
-fit <- loo_result$fits[["K4"]]
-
-# Or using the K value as a number:
-K_best <- 4
-fit <- loo_result$fits[[paste0("K", K_best)]]
-
-# Confirm what you have:
-print(fit)
-
-##You can also plot the results!
-
-# Structure plot — one bar per sample, colored by community membership probability
-eDNA_dmm_structure(fit, metadata = data$covariates,
+# Plot the results
+eDNA_dmm_structure(fit, metadata = data$metadata,
                    facet_var = "TrueCommunity", sort_var = "Depth")
+eDNA_dmm_compositions(fit)   # what each community looks like in species space
+eDNA_dmm_nmds(fit)$plot      # ordination, colored by assignment
+eDNA_dmm_beta(fit)$plot      # prior vs posterior for covariate effects
+```
 
-# NMDS ordination colored by community assignment
-eDNA_dmm_nmds(fit)$plot
+### Choosing K
 
-# Prior vs posterior distributions for covariate effects
-eDNA_dmm_beta(fit)$plot
+```r
+loo_result <- eDNA_loo(data$counts, data$covariates, K_range = 2:5)
+loo_result$plot        # elbow plot
+
+# All fitted models are stored — no need to refit
+fit <- loo_result$fits[["K4"]]
+```
+
+### If you have replicates
+
+Don't sum them. Give each replicate its own row and group them with `station_id`:
+
+```r
+r <- get_example_replicates()
+
+dim(r$counts)          # 60 replicates x 33 taxa — one row per bottle
+head(r$station_id, 6)  # which site each row came from
+nrow(r$covariates)     # 20 — covariates stay station-level
+
+fit_rep <- eDNA_dmm(
+  counts     = r$counts,
+  station_id = r$station_id,   # <- this switches on the hierarchical model
+  covariates = r$covariates,
+  K          = 4
+)
+
+fit_rep$phi_mean   # replicate reproducibility
+```
+
+### Simulating your own data
+
+`simulate_eDNA_survey()` generates surveys with known ground truth for method validation. Note that it returns the **full simulation object**, which is shaped differently from `get_example_data()` — `$covariates` there includes ground-truth columns, so subset it before fitting:
+
+```r
+sim <- simulate_eDNA_survey(
+  n_communities         = 4,
+  n_species             = 40,
+  samples_per_community = 5,
+  seed                  = 2026
+)
+
+fit <- eDNA_dmm(
+  counts     = sim$counts,
+  covariates = sim$covariates[, c("Depth", "Distance_shore")],   # subset needed
+  K          = 4
+)
 ```
 
 > **For a complete walkthrough** — including step-by-step simulation, data formatting, K selection, all visualization options, parameter recovery, and troubleshooting — see the **[full tutorial vignette](vignettes/tutorial.Rmd)**. It is designed to be read start to finish and assumes no prior familiarity with Bayesian mixture models.
@@ -131,6 +147,74 @@ eDNA_dmm_beta(fit)$plot
 ---
 
 ## Input data format
+
+The model needs **two things**, and only the first is required:
+
+1. **A species/ASV × site table** — the count matrix. This is the only required input.
+2. **A covariate table** — *optional*. Supply it only if you want to model how environmental variables drive community membership. `eDNA_dmm()` runs perfectly well without it.
+
+### Starting from one file
+
+In practice your data usually arrive as a single spreadsheet with sample IDs, environmental variables and counts all side by side. A file of exactly that shape ships with the package so you can see the split:
+
+```r
+path <- system.file("extdata", "example_edna_raw.csv", package = "eDNAstructure")
+raw  <- read.csv(path, check.names = FALSE)
+
+raw[1:3, 1:7]
+#   sample_id Depth Distance_shore TrueCommunity Sp_1 Sp_2 Sp_10
+# 1   STN_001 86.25         201.95             1   34  154  3922
+# 2   STN_002 73.33         197.48             1 1280  189  1366
+# 3   STN_003 75.76         208.23             1 1665  878   606
+```
+
+Split it into the two tables:
+
+```r
+# Which columns hold taxa? Adjust this one line to match your own file --
+# a name prefix, a known column range, or setdiff() against your metadata names.
+taxon_cols <- grep("^Sp_", names(raw))
+
+# 1. THE SPECIES/ASV x SITE TABLE  — required
+counts <- as.matrix(raw[, taxon_cols])
+rownames(counts) <- raw$sample_id
+storage.mode(counts) <- "integer"
+
+# 2. THE COVARIATE TABLE — optional, numeric columns only
+covariates <- raw[, c("Depth", "Distance_shore")]
+rownames(covariates) <- raw$sample_id
+```
+
+```r
+fit <- eDNA_dmm(counts, K = 4)                     # without covariates
+fit <- eDNA_dmm(counts, covariates = covariates, K = 4)   # with them
+```
+
+> **The covariate table must be numeric, and only numeric.** `eDNA_dmm()` fits every column you give it, so an identifier column such as `sample_id`, or a label such as `TrueCommunity`, must not be in it — the model would try to fit the ID as an environmental gradient. Keep those in a separate metadata frame and pass it to the plotting functions' `metadata` argument instead.
+
+If you have replicates, `inst/extdata/example_edna_replicates_raw.csv` shows that shape — one row per bottle plus a `station_id` column:
+
+```r
+path <- system.file("extdata", "example_edna_replicates_raw.csv", package = "eDNAstructure")
+raw  <- read.csv(path, check.names = FALSE)
+
+raw[1:4, 1:6]
+#   replicate_id station_id Depth Distance_shore TrueCommunity Sp_1
+# 1   STN_001_B1    STN_001 74.29         190.19             1  561
+# 2   STN_001_B2    STN_001 74.29         190.19             1  628
+# 3   STN_001_B3    STN_001 74.29         190.19             1  230
+# 4   STN_002_B1    STN_002 81.64         203.72             1  845
+
+counts     <- as.matrix(raw[, grep("^Sp_", names(raw))])
+rownames(counts) <- raw$replicate_id
+station_id <- raw$station_id            # <- groups the rows
+
+# Covariates stay station-level: one row per station, not per replicate
+covariates <- unique(raw[, c("station_id", "Depth", "Distance_shore")])
+rownames(covariates) <- covariates$station_id
+covariates$station_id <- NULL
+```
+
 
 ### Count matrix
 
@@ -163,7 +247,7 @@ count_matrix <- long_df |>
 A **sample × covariate** data frame in the same row order as the count matrix. Covariates are Z-score standardized internally by default.
 
 ```r
-head(data$covariates)
+head(data$metadata)
 #   sample_id  TrueCommunity  Depth  Distance_shore
 # 1   STN_001              1     82             198
 # 2   STN_002              1     79             204
@@ -585,25 +669,63 @@ Note this is deliberately **not** the same ranking as mean observed frequency ac
 
 ### `get_example_data()` — Built-in example dataset
 
-Returns the built-in simulated dataset: 20 samples across 4 communities separated by depth and distance from shore, generated by `simulate_eDNA_survey()` with known ground truth, so fitted parameters can be compared to the true values.
+A small, deliberately plain example: a site-by-taxon count table plus the two numeric covariates that separate the communities. 20 sites, 33 taxa, 4 true communities.
 
 ```r
 data <- get_example_data()
-# data$counts                 — integer matrix, 20 samples × 33 taxa
-# data$covariates             — data frame: sample_id, SampleID, TrueCommunity,
-#                               Depth, Distance_shore
-# data$community_compositions — true composition matrix, 4 × 40
-# data$metab_df               — raw simulated metabarcoding reads
-# data$sample_metadata        — full simulation metadata
-# data$contributors           — per-sample organism lists behind the reads
+
+data$counts       # integer matrix, 20 sites × 33 taxa (rows = sites)
+data$covariates   # data frame, 20 × 2: Depth, Distance_shore — numeric only
+data$metadata     # data frame, 20 × 4: sample_id, TrueCommunity, Depth, Distance_shore
 ```
 
-> **Why 33 taxa and not 40?** The simulation draws 40 species, but taxa that end up
-> with zero reads across every sample are dropped from `counts` (they carry no
-> information and the model rejects all-zero columns). `community_compositions`
-> keeps the full 40-column ground truth, so the two deliberately differ in width.
+That's the whole object — three elements. It goes straight into the model with nothing to subset:
+
+```r
+fit <- eDNA_dmm(counts = data$counts, covariates = data$covariates, K = 4)
+eDNA_dmm_structure(fit, metadata = data$metadata, facet_var = "TrueCommunity")
+```
+
+**Why `covariates` and `metadata` are separate.** `eDNA_dmm()` requires every covariate column to be numeric — it will try to fit whatever you hand it. So an identifier like `sample_id`, or a ground-truth label like `TrueCommunity`, cannot live in `covariates`. The plotting functions want exactly those labelling columns. Keeping the two apart means both calls work as written, with no subsetting.
+
+> **Why 33 taxa and not 40?** The simulation draws 40 species, but taxa with zero reads across every sample are dropped from `counts` — they carry no information and the model rejects all-zero columns.
+
+The simulation's internal tables (contributor lists, per-organism shedding, raw long-format reads) are **not** shipped. They are an implementation detail of `simulate_eDNA_survey()`, not an example of what eDNA data look like. Call [`simulate_eDNA_survey()`](#simulation-pipeline) directly if you want them.
 
 ---
+
+### `get_example_replicates()` — Built-in replicated example
+
+The same survey with three bottle replicates per site, so the expected shape of replicated data is visible without simulating it.
+
+```r
+r <- get_example_replicates()
+
+r$counts      # integer matrix, 60 replicates × 33 taxa
+              #   rownames: STN_001_B1, STN_001_B2, STN_001_B3, STN_002_B1, ...
+r$station_id  # character, length 60 — which site each row came from
+r$covariates  # data frame, 20 × 2 — station-level, one row per site
+r$metadata    # data frame, 20 × 4 — station-level labelling columns
+```
+
+The only structural difference from `get_example_data()`: `counts` has one row per **replicate**, and `station_id` says which rows belong together. Covariates stay **station-level** — 20 rows, not 60.
+
+```r
+fit <- eDNA_dmm(
+  counts     = r$counts,
+  station_id = r$station_id,
+  covariates = r$covariates,
+  K          = 4
+)
+
+fit$theta_mean   # [20 stations × 33 taxa] posterior mean station compositions
+fit$phi_mean     # replicate reproducibility
+```
+
+See [Replicated samples](#replicated-samples--station_id) for why you should not sum replicates before fitting.
+
+---
+
 
 ### `eDNA_clear_stan_cache()` — Reset the compiled model cache
 

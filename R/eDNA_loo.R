@@ -145,47 +145,57 @@ eDNA_loo <- function(
 
 
 # =============================================================================
-# get_example_data() — Built-in example dataset
+# get_example_data() / get_example_replicates() — Built-in example datasets
 # =============================================================================
 
-#' Load the eDNA_structure example dataset
+#' Load the built-in example dataset
 #'
 #' @description
-#' Returns a small, self-contained example dataset suitable for exploring
-#' the package functions. The dataset is a simulated (but ecologically
-#' realistic) eDNA metabarcoding survey with 60 samples and 25 taxa across
-#' two depth strata and three sampling years.
+#' A small, deliberately plain example survey: a site-by-taxon count table plus
+#' the two numeric covariates that separate the communities. Twenty sites,
+#' 33 taxa, four true communities.
 #'
-#' Use this dataset to:
-#' - Learn the expected input format for [eDNA_dmm()]
-#' - Follow along with the package vignette (`vignette("eDNA_structure")`)
-#' - Test that the package is installed and working correctly
+#' Use it to learn the expected input format for [eDNA_dmm()], to follow the
+#' vignettes, or to check that your installation works.
 #'
 #' @section Data format:
-#' The returned list contains:
 #' \describe{
-#'   \item{`counts`}{An integer matrix (60 samples × 25 taxa) of simulated read
-#'     counts. Row names are sample IDs; column names are taxon names.}
-#'   \item{`covariates`}{A data frame (60 rows) with columns:
-#'     \describe{
-#'       \item{`sample_id`}{Sample identifier (matches `rownames(counts)`).}
-#'       \item{`latitude`}{Latitude of the sampling station (decimal degrees).}
-#'       \item{`depth`}{Sample depth in meters.}
-#'       \item{`year`}{Sampling year (2019, 2021, or 2023).}
-#'       \item{`depth_bin`}{Depth stratum label: `"shallow"` (0–100 m) or
-#'         `"deep"` (> 100 m).}
-#'     }
-#'   }
+#'   \item{`counts`}{Integer matrix, 20 sites x 33 taxa. Rows are sites
+#'     (`STN_001`-`STN_020`), columns are taxa (`Sp_1`, `Sp_2`, ...).
+#'     This is the only required input to [eDNA_dmm()].}
+#'   \item{`covariates`}{Data frame, 20 rows x 2 numeric columns: `Depth` (m)
+#'     and `Distance_shore`. Every column is numeric, so this can be passed
+#'     straight to [eDNA_dmm()] with nothing dropped.}
+#'   \item{`metadata`}{Data frame, 20 rows: `sample_id`, `TrueCommunity`,
+#'     `Depth`, `Distance_shore`. The labelling columns, kept separate from
+#'     the model covariates. Pass this to the plotting functions'
+#'     `metadata` argument.}
+#' }
+#'
+#' `covariates` and `metadata` are separate on purpose. `eDNA_dmm()` requires
+#' every covariate column to be numeric, so an identifier column such as
+#' `sample_id`, or a ground-truth column such as `TrueCommunity`, cannot be
+#' part of `covariates` - the model would try to fit it. The plotting
+#' functions want exactly those labelling columns. Keeping the two apart means
+#' both calls work without the user having to subset anything.
+#'
+#' @section Community structure:
+#' Four communities separated by two covariates:
+#' \itemize{
+#'   \item **Community 1**: deep (80 m) + offshore (200 units)
+#'   \item **Community 2**: surface (10 m) + offshore (200 units)
+#'   \item **Community 3**: deep (80 m) + inshore (20 units)
+#'   \item **Community 4**: surface (10 m) + inshore (20 units)
 #' }
 #'
 #' @section Formatting your own data:
 #' The `counts` matrix format is the required input to [eDNA_dmm()]:
-#' - **Rows** = samples (one row per station, individual, or replicate)
-#' - **Columns** = taxa (or ASVs — taxonomic annotation is not required)
-#' - **Values** = non-negative integer read counts
+#' - **Rows** = samples (one row per site, or per replicate - see
+#'   [get_example_replicates()])
+#' - **Columns** = taxa, or ASVs; taxonomic annotation is not required
+#' - **Values** = non-negative integer read counts, not normalised
 #'
-#' If your count table is in long format (sample, taxon, count in three
-#' columns), convert it to wide format with [tidyr::pivot_wider()]:
+#' If your count table is in long format (sample, taxon, count), pivot it:
 #' ```r
 #' library(tidyr)
 #' count_matrix <- pivot_wider(
@@ -198,33 +208,76 @@ eDNA_loo <- function(
 #'   as.matrix()
 #' ```
 #'
-#' @return A named list with elements `counts` and `covariates`. See the
-#'   **Data format** section for details.
+#' @return A named list with elements `counts`, `covariates` and `metadata`.
+#'
+#' @seealso [get_example_replicates()] for the replicated version of the same
+#'   survey, [simulate_eDNA_survey()] to generate your own.
 #'
 #' @examples
-#' # Load example data
-#' data <- get_example_data()
+#' d <- get_example_data()
 #'
-#' # Inspect the count matrix
-#' dim(data$counts)           # 60 samples x 25 taxa
-#' head(data$counts[, 1:5])   # first 5 taxa
+#' dim(d$counts)          # 20 sites x 33 taxa
+#' d$counts[1:3, 1:5]
+#' head(d$covariates)     # numeric only
 #'
-#' # Inspect the covariate data frame
-#' head(data$covariates)
-#'
-#' # Fit a K=2 model
 #' \dontrun{
-#' fit <- eDNA_dmm(
-#'   counts     = data$counts,
-#'   covariates = data$covariates[, c("latitude", "depth")],
-#'   K          = 2
-#' )
+#' fit <- eDNA_dmm(counts = d$counts, covariates = d$covariates, K = 4)
 #' print(fit)
-#' eDNA_dmm_structure(fit)
+#' eDNA_dmm_structure(fit, metadata = d$metadata, facet_var = "TrueCommunity")
 #' }
 #'
 #' @export
 get_example_data <- function() {
-  # Return the lazy-loaded data object
   example_edna
+}
+
+
+#' Load the built-in replicated example dataset
+#'
+#' @description
+#' The same survey as [get_example_data()], but with three bottle replicates
+#' per site instead of one pooled sample. Use it to see how replicated data
+#' should be shaped for the hierarchical model.
+#'
+#' The only structural difference is that `counts` has one row per *replicate*
+#' rather than per site, and a `station_id` vector says which rows belong
+#' together. Do not sum replicates before fitting - see [eDNA_dmm()].
+#'
+#' @section Data format:
+#' \describe{
+#'   \item{`counts`}{Integer matrix, 60 replicates x 33 taxa. Row names are
+#'     `STN_001_B1`, `STN_001_B2`, ... - three bottles per site.}
+#'   \item{`station_id`}{Character vector of length 60 giving the site each
+#'     row belongs to. Pass this as `station_id` to [eDNA_dmm()].}
+#'   \item{`covariates`}{Data frame, 20 rows x 2 numeric columns. Covariates
+#'     are **station-level**: one row per site, not per replicate.}
+#'   \item{`metadata`}{Data frame, 20 rows, station-level labelling columns.}
+#' }
+#'
+#' @return A named list with elements `counts`, `station_id`, `covariates`
+#'   and `metadata`.
+#'
+#' @seealso [get_example_data()], [eDNA_dmm()]
+#'
+#' @examples
+#' r <- get_example_replicates()
+#'
+#' dim(r$counts)            # 60 replicates x 33 taxa
+#' r$counts[1:4, 1:5]       # STN_001_B1 .. STN_002_B1
+#' head(r$station_id, 6)    # which site each row came from
+#' nrow(r$covariates)       # 20 - one row per site, not per replicate
+#'
+#' \dontrun{
+#' fit <- eDNA_dmm(
+#'   counts     = r$counts,
+#'   station_id = r$station_id,
+#'   covariates = r$covariates,
+#'   K          = 4
+#' )
+#' fit$phi_mean   # replicate reproducibility
+#' }
+#'
+#' @export
+get_example_replicates <- function() {
+  example_edna_reps
 }

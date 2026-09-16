@@ -1,26 +1,55 @@
 test_that("get_example_data() returns the correct structure", {
   d <- get_example_data()
   expect_type(d, "list")
-  expect_named(
-    d,
-    c("counts", "covariates", "community_compositions",
-      "metab_df", "sample_metadata", "contributors"),
-    ignore.order = TRUE
-  )
+  expect_named(d, c("counts", "covariates", "metadata"), ignore.order = TRUE)
 
   expect_true(is.matrix(d$counts))
+  expect_type(d$counts, "integer")
   expect_equal(nrow(d$counts), 20L)
   expect_gt(ncol(d$counts), 1L)
+  expect_false(is.null(rownames(d$counts)))
+  expect_false(is.null(colnames(d$counts)))
 
   expect_s3_class(d$covariates, "data.frame")
-  expect_equal(nrow(d$covariates), 20L)
-  expect_true(all(c("sample_id", "TrueCommunity", "Depth", "Distance_shore") %in%
-                    names(d$covariates)))
+  expect_equal(nrow(d$covariates), nrow(d$counts))
+  expect_named(d$covariates, c("Depth", "Distance_shore"), ignore.order = TRUE)
 
-  # Ground truth is kept at full taxon width; all-zero taxa are dropped from
-  # `counts`, so the two need not share a column count.
-  expect_true(is.matrix(d$community_compositions))
-  expect_equal(nrow(d$community_compositions), 4L)
+  expect_s3_class(d$metadata, "data.frame")
+  expect_equal(nrow(d$metadata), nrow(d$counts))
+  expect_true(all(c("sample_id", "TrueCommunity", "Depth", "Distance_shore") %in%
+                    names(d$metadata)))
+  expect_equal(d$metadata$sample_id, rownames(d$counts))
+})
+
+test_that("get_example_data() covariates go straight into eDNA_dmm()", {
+  # Regression test for a real usability bug: `covariates` must be all-numeric
+  # so the obvious call -- eDNA_dmm(counts = d$counts, covariates = d$covariates)
+  # -- works without the user first dropping an ID or ground-truth column.
+  d <- get_example_data()
+  expect_true(all(vapply(d$covariates, is.numeric, logical(1))))
+  expect_no_error(validate_covariates(d$covariates, d$counts, TRUE))
+})
+
+test_that("get_example_replicates() returns the correct structure", {
+  r <- get_example_replicates()
+  expect_type(r, "list")
+  expect_named(r, c("counts", "station_id", "covariates", "metadata"),
+               ignore.order = TRUE)
+
+  expect_true(is.matrix(r$counts))
+  expect_type(r$counts, "integer")
+  expect_type(r$station_id, "character")
+  expect_equal(length(r$station_id), nrow(r$counts))
+
+  n_stations <- length(unique(r$station_id))
+  expect_gt(nrow(r$counts), n_stations)          # more rows than stations
+  expect_equal(nrow(r$covariates), n_stations)   # covariates are station-level
+  expect_equal(nrow(r$metadata), n_stations)
+
+  expect_true(all(vapply(r$covariates, is.numeric, logical(1))))
+
+  # Replication is balanced at 3 bottles per station
+  expect_true(all(table(r$station_id) == 3L))
 })
 
 test_that("validate_counts() catches bad inputs", {
@@ -81,4 +110,42 @@ test_that("make_community_colors() returns correct number of colors", {
     expect_length(cols, k)
     expect_equal(names(cols), paste0("Community ", seq_len(k)))
   }
+})
+
+test_that("shipped raw CSVs split into the documented tables", {
+  # Guards the "Starting from one file" recipe in the README and the Getting
+  # Started vignette: splitting the shipped CSV must reproduce the objects
+  # get_example_data() returns.
+  path <- system.file("extdata", "example_edna_raw.csv", package = "eDNAstructure")
+  expect_true(nzchar(path))
+
+  raw <- utils::read.csv(path, check.names = FALSE)
+  expect_true(all(c("sample_id", "Depth", "Distance_shore") %in% names(raw)))
+
+  taxon_cols <- grep("^Sp_", names(raw))
+  expect_gt(length(taxon_cols), 1L)
+
+  counts <- as.matrix(raw[, taxon_cols])
+  rownames(counts) <- raw$sample_id
+  storage.mode(counts) <- "integer"
+
+  expect_identical(counts, get_example_data()$counts)
+
+  covariates <- raw[, c("Depth", "Distance_shore")]
+  expect_true(all(vapply(covariates, is.numeric, logical(1))))
+})
+
+test_that("shipped replicate CSV carries a station_id column", {
+  path <- system.file("extdata", "example_edna_replicates_raw.csv",
+                      package = "eDNAstructure")
+  expect_true(nzchar(path))
+
+  raw <- utils::read.csv(path, check.names = FALSE)
+  expect_true(all(c("replicate_id", "station_id") %in% names(raw)))
+  expect_equal(nrow(raw), 60L)
+  expect_equal(length(unique(raw$station_id)), 20L)
+
+  # Covariates are constant within a station, so collapsing gives one row each
+  cov <- unique(raw[, c("station_id", "Depth", "Distance_shore")])
+  expect_equal(nrow(cov), 20L)
 })
