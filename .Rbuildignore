@@ -1,2 +1,5 @@
 ^.*\.Rproj$
 ^\.Rproj\.user$
+^inst/stan/.*\.rds$
+^data-raw$
+^LICENSE\.md$

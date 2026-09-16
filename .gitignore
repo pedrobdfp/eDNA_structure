@@ -16,3 +16,8 @@ inst/doc
 src/*.o
 src/*.dll
 src/*.so
+
+# rstan auto_write() drops a compiled stanmodel next to each .stan source.
+# These are machine-specific build artifacts, never inputs - see R/stanmodels.R,
+# which only ever reads the .stan file and caches per-machine elsewhere.
+inst/stan/*.rds

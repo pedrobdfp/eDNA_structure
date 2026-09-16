@@ -2,43 +2,52 @@
 % Please edit documentation in R/eDNA_loo.R
 \name{get_example_data}
 \alias{get_example_data}
-\title{Load the eDNA_structure example dataset}
+\title{Load the built-in example dataset}
 \usage{
 get_example_data()
 }
 \value{
-A named list with elements \code{counts} and \code{covariates}. See the
-\strong{Data format} section for details.
+A named list with elements \code{counts}, \code{covariates} and \code{metadata}.
 }
 \description{
-Returns a small, self-contained example dataset suitable for exploring
-the package functions. The dataset is a simulated (but ecologically
-realistic) eDNA metabarcoding survey with 60 samples and 25 taxa across
-two depth strata and three sampling years.
+A small, deliberately plain example survey: a site-by-taxon count table plus
+the two numeric covariates that separate the communities. Twenty sites,
+33 taxa, four true communities.
 
-Use this dataset to:
-\itemize{
-\item Learn the expected input format for \code{\link[=eDNA_dmm]{eDNA_dmm()}}
-\item Follow along with the package vignette (\code{vignette("eDNA_structure")})
-\item Test that the package is installed and working correctly
-}
+Use it to learn the expected input format for \code{\link[=eDNA_dmm]{eDNA_dmm()}}, to follow the
+vignettes, or to check that your installation works.
 }
 \section{Data format}{
 
-The returned list contains:
 \describe{
-\item{\code{counts}}{An integer matrix (60 samples × 25 taxa) of simulated read
-counts. Row names are sample IDs; column names are taxon names.}
-\item{\code{covariates}}{A data frame (60 rows) with columns:
-\describe{
-\item{\code{sample_id}}{Sample identifier (matches \code{rownames(counts)}).}
-\item{\code{latitude}}{Latitude of the sampling station (decimal degrees).}
-\item{\code{depth}}{Sample depth in meters.}
-\item{\code{year}}{Sampling year (2019, 2021, or 2023).}
-\item{\code{depth_bin}}{Depth stratum label: \code{"shallow"} (0–100 m) or
-\code{"deep"} (> 100 m).}
+\item{\code{counts}}{Integer matrix, 20 sites x 33 taxa. Rows are sites
+(\code{STN_001}-\code{STN_020}), columns are taxa (\code{Sp_1}, \code{Sp_2}, ...).
+This is the only required input to \code{\link[=eDNA_dmm]{eDNA_dmm()}}.}
+\item{\code{covariates}}{Data frame, 20 rows x 2 numeric columns: \code{Depth} (m)
+and \code{Distance_shore}. Every column is numeric, so this can be passed
+straight to \code{\link[=eDNA_dmm]{eDNA_dmm()}} with nothing dropped.}
+\item{\code{metadata}}{Data frame, 20 rows: \code{sample_id}, \code{TrueCommunity},
+\code{Depth}, \code{Distance_shore}. The labelling columns, kept separate from
+the model covariates. Pass this to the plotting functions'
+\code{metadata} argument.}
 }
+
+\code{covariates} and \code{metadata} are separate on purpose. \code{eDNA_dmm()} requires
+every covariate column to be numeric, so an identifier column such as
+\code{sample_id}, or a ground-truth column such as \code{TrueCommunity}, cannot be
+part of \code{covariates} - the model would try to fit it. The plotting
+functions want exactly those labelling columns. Keeping the two apart means
+both calls work without the user having to subset anything.
 }
+
+\section{Community structure}{
+
+Four communities separated by two covariates:
+\itemize{
+\item \strong{Community 1}: deep (80 m) + offshore (200 units)
+\item \strong{Community 2}: surface (10 m) + offshore (200 units)
+\item \strong{Community 3}: deep (80 m) + inshore (20 units)
+\item \strong{Community 4}: surface (10 m) + inshore (20 units)
 }
 }
 
@@ -46,13 +55,13 @@ counts. Row names are sample IDs; column names are taxon names.}
 
 The \code{counts} matrix format is the required input to \code{\link[=eDNA_dmm]{eDNA_dmm()}}:
 \itemize{
-\item \strong{Rows} = samples (one row per station, individual, or replicate)
-\item \strong{Columns} = taxa (or ASVs — taxonomic annotation is not required)
-\item \strong{Values} = non-negative integer read counts
+\item \strong{Rows} = samples (one row per site, or per replicate - see
+\code{\link[=get_example_replicates]{get_example_replicates()}})
+\item \strong{Columns} = taxa, or ASVs; taxonomic annotation is not required
+\item \strong{Values} = non-negative integer read counts, not normalised
 }
 
-If your count table is in long format (sample, taxon, count in three
-columns), convert it to wide format with \code{\link[tidyr:pivot_wider]{tidyr::pivot_wider()}}:
+If your count table is in long format (sample, taxon, count), pivot it:
 
 \if{html}{\out{<div class="sourceCode r">}}\preformatted{library(tidyr)
 count_matrix <- pivot_wider(
@@ -67,25 +76,20 @@ count_matrix <- pivot_wider(
 }
 
 \examples{
-# Load example data
-data <- get_example_data()
+d <- get_example_data()
 
-# Inspect the count matrix
-dim(data$counts)           # 60 samples x 25 taxa
-head(data$counts[, 1:5])   # first 5 taxa
+dim(d$counts)          # 20 sites x 33 taxa
+d$counts[1:3, 1:5]
+head(d$covariates)     # numeric only
 
-# Inspect the covariate data frame
-head(data$covariates)
-
-# Fit a K=2 model
 \dontrun{
-fit <- eDNA_dmm(
-  counts     = data$counts,
-  covariates = data$covariates[, c("latitude", "depth")],
-  K          = 2
-)
+fit <- eDNA_dmm(counts = d$counts, covariates = d$covariates, K = 4)
 print(fit)
-eDNA_dmm_structure(fit)
+eDNA_dmm_structure(fit, metadata = d$metadata, facet_var = "TrueCommunity")
 }
 
+}
+\seealso{
+\code{\link[=get_example_replicates]{get_example_replicates()}} for the replicated version of the same
+survey, \code{\link[=simulate_eDNA_survey]{simulate_eDNA_survey()}} to generate your own.
 }
