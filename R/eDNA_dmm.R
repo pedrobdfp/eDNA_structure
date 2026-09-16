@@ -95,14 +95,14 @@
 #'   \item{`sample_info`}{Data frame: one row per sample with posterior
 #'     community membership probabilities (`prob_comm1`, `prob_comm2`, ...),
 #'     MAP assignment (`z_hat`), and assignment certainty.}
-#'   \item{`pi_mean`}{Matrix [K × S]: posterior mean community compositions.
+#'   \item{`pi_mean`}{Matrix `K × S`: posterior mean community compositions.
 #'     `pi_mean[k, j]` = posterior mean relative frequency of taxon `j` in
 #'     community `k`.}
 #'   \item{`beta_summary`}{Data frame: posterior summaries for each softmax
 #'     regression coefficient (mean, 90% CI, P(direction), ESS).}
 #'   \item{`alpha_mean`}{Scalar: posterior mean of the overdispersion parameter.}
 #'   \item{`replicate`}{Logical: whether the replicate-aware model was used.}
-#'   \item{`theta_mean`}{Matrix [N × S] of posterior mean **station**
+#'   \item{`theta_mean`}{Matrix `N × S` of posterior mean **station**
 #'     compositions, or `NULL` when the standard model was used. Only available
 #'     from the replicate model — the summed model has no station-level
 #'     composition parameter.}
@@ -592,7 +592,7 @@ print.edna_dmm_fit <- function(x, ...) {
   cat(sprintf("  Covariates       : %s\n",
               if (length(x$covariate_names) > 0)
                 paste(x$covariate_names, collapse = ", ")
-              else "(none — intercept-only)"))
+              else "(none - intercept-only)"))
   cat(sprintf("  Mean alpha       : %.2f%s\n", x$alpha_mean,
               if (replicate) "  (station spread around community)" else ""))
   if (replicate) {
@@ -606,18 +606,18 @@ print.edna_dmm_fit <- function(x, ...) {
                 nm, tbl[[nm]], 100 * tbl[[nm]] / x$N))
   }
   cat("\nUse summary() for convergence diagnostics, or pass this object to:\n")
-  cat("  eDNA_dmm_structure()  — structure bar plots\n")
-  cat("  eDNA_dmm_nmds()       — NMDS ordination\n")
-  cat("  eDNA_dmm_beta()       — covariate coefficient plots\n")
+  cat("  eDNA_dmm_structure()  - structure bar plots\n")
+  cat("  eDNA_dmm_nmds()       - NMDS ordination\n")
+  cat("  eDNA_dmm_beta()       - covariate coefficient plots\n")
   if (replicate) {
-    cat("\n  $theta_mean            — posterior mean composition of each station\n")
+    cat("\n  $theta_mean            - posterior mean composition of each station\n")
   }
   invisible(x)
 }
 
 #' @export
 summary.edna_dmm_fit <- function(object, ...) {
-  cat("eDNA DMM — Fit Summary\n")
+  cat("eDNA DMM - Fit Summary\n")
   cat("======================\n\n")
   
   cat("Call:\n  ")

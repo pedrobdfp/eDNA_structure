@@ -211,7 +211,7 @@ eDNA_dmm_nmds <- function(
     stress < 0.05  ~ "excellent",
     stress < 0.10  ~ "good",
     stress < 0.20  ~ "adequate",
-    TRUE           ~ "poor — consider k=3"
+    TRUE           ~ "poor - consider k=3"
   )
 
   # ── Build plot ────────────────────────────────────────────────────────────────

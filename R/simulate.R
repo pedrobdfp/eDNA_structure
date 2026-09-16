@@ -26,7 +26,7 @@
 #' @param n_shared An integer or NULL: number of species in the shared background
 #'   pool. NULL (default) uses all remaining species after dominants, uniques,
 #'   and group-shared are assigned.
-#' @param spillover A number in [0, 1]: mean fraction of a species' total
+#' @param spillover A number in `[0, 1]`: mean fraction of a species' total
 #'   frequency that leaks into non-native communities. Default `0.15`.
 #'   `0` = perfectly exclusive communities; `1` = no community structure.
 #' @param spillover_concentration A positive number: concentration of the Beta
@@ -40,7 +40,7 @@
 #'   each group (not across groups). Default `0`.
 #' @param group_shared_freq A length-2 numeric vector: min and max frequency for
 #'   group-shared species. Default `c(0.02, 0.08)`.
-#' @param group_shared_presence A number in [0, 1]: probability that a
+#' @param group_shared_presence A number in `[0, 1]`: probability that a
 #'   group-shared species is present in a given community of its group.
 #'   Default `0.9`.
 #' @param n_dominant_range A length-2 integer vector: min and max number of
@@ -53,11 +53,11 @@
 #'   unique low-frequency species. Default `c(0.005, 0.04)`.
 #' @param shared_freq A length-2 numeric vector: min and max frequency for
 #'   shared background species. Default `c(0.001, 0.05)`.
-#' @param shared_presence A number in [0, 1]: probability that a shared
+#' @param shared_presence A number in `[0, 1]`: probability that a shared
 #'   background species appears in a given community. Default `0.4`.
 #' @param seed An integer random seed for reproducibility, or `NULL`. Default `NULL`.
 #'
-#' @return A numeric matrix [K × S] of community compositions (rows sum to 1).
+#' @return A numeric matrix `K × S` of community compositions (rows sum to 1).
 #'   Row names are `"Community_1"` through `"Community_K"`. Column names are
 #'   `"Sp_1"` through `"Sp_S"`. The matrix carries attributes documenting which
 #'   species are dominants, uniques, group-shared, shared, and absent per community.
@@ -234,7 +234,7 @@ generate_community_compositions <- function(
 #' from the sampler. Species flagged as grouped (schooling) share distances
 #' within groups; ungrouped (solitary) species get independent distances.
 #'
-#' @param community_compositions A [K × S] community composition matrix from
+#' @param community_compositions A `K × S` community composition matrix from
 #'   [generate_community_compositions()].
 #' @param samples_per_community A positive integer: number of independent samples
 #'   (stations) drawn from each community. Default `3`.
@@ -580,10 +580,10 @@ simulate_metabarcoding <- function(
 #'
 #' @param contributors_list A list of contributor data frames from
 #'   [generate_contributors()] (the `$contributors_list` element).
-#' @param community_covariates A [K × P] numeric matrix of community-specific
+#' @param community_covariates A `K × P` numeric matrix of community-specific
 #'   covariate means. Row k gives the mean covariate values for community k.
 #'   Column names become covariate names.
-#' @param covariate_sds A [K × P] numeric matrix of standard deviations, or
+#' @param covariate_sds A `K × P` numeric matrix of standard deviations, or
 #'   `NULL` (default) to use SD = 5 for all covariates and communities.
 #' @param seed An integer random seed, or `NULL`. Default `NULL`.
 #'
@@ -633,18 +633,18 @@ generate_sample_covariates <- function(
 #' @param n_communities Integer. Number of communities K. Default `4`.
 #' @param n_species Integer. Number of species S. Default `40`.
 #' @param samples_per_community Integer. Samples per community. Default `3`.
-#' @param community_covariate_means A [K × P] matrix of covariate means per
+#' @param community_covariate_means A `K × P` matrix of covariate means per
 #'   community. Rows = communities, columns = covariates. If `NULL` (default),
 #'   a two-covariate (Depth × Distance_shore) design with four well-separated
 #'   communities is used.
-#' @param covariate_sds A [K × P] matrix of covariate SDs, or `NULL` for
+#' @param covariate_sds A `K × P` matrix of covariate SDs, or `NULL` for
 #'   SD = 5 on all. Default `NULL`.
 #' @param samples_per_community Integer. Default `3`.
 #' @param mean_read_depth Numeric. Mean reads per sample. Default `10000`.
 #' @param bio_reps Integer. Biological replicates per sample. Default `1`.
 #' @param seq_reps Integer. Sequencing technical replicates per bio rep.
 #'   Default `1`.
-#' @param spillover Numeric [0,1]. Community spillover. Default `0.15`.
+#' @param spillover Numeric `[0,1]`. Community spillover. Default `0.15`.
 #' @param shedding_error Numeric. Lognormal shedding noise SD. Default `0.3`.
 #' @param decay_rate Numeric. eDNA decay rate with distance. Default `0.1`.
 #' @param seed Integer random seed. Default `42`.
@@ -652,10 +652,10 @@ generate_sample_covariates <- function(
 #'
 #' @return A list with:
 #' \describe{
-#'   \item{`counts`}{Integer matrix [N × S] ready for [eDNA_dmm()].}
+#'   \item{`counts`}{Integer matrix `N × S` ready for [eDNA_dmm()].}
 #'   \item{`covariates`}{Data frame with `sample_id`, `TrueCommunity`, and
 #'     covariate columns, ready for [eDNA_dmm()].}
-#'   \item{`community_compositions`}{The true [K × S] composition matrix.}
+#'   \item{`community_compositions`}{The true `K × S` composition matrix.}
 #'   \item{`metab_df`}{Raw metabarcoding data frame.}
 #'   \item{`sample_metadata`}{Full sample metadata data frame.}
 #'   \item{`contributors`}{Output of [generate_contributors()].}

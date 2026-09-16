@@ -7,7 +7,7 @@ output:
     toc_depth: 3
     number_sections: true
 vignette: >
-  %\VignetteIndexEntry{Getting Started with eDNA_structure}
+  %\VignetteIndexEntry{Getting Started with eDNAstructure}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -130,7 +130,7 @@ raw ASV tables and to taxonomically-collapsed count tables.
 data <- get_example_data()
 
 # Inspect the count matrix
-dim(data$counts)  # 60 samples × 25 taxa
+dim(data$counts)  # 20 samples x 33 taxa
 
 # First 5 samples, first 6 taxa
 data$counts[1:5, 1:6]
@@ -138,10 +138,10 @@ data$counts[1:5, 1:6]
 
 The output will look something like:
 ```
-                  Engraulis mordax Sardinops sagax Merluccius productus ...
-STN_001                       412             310                   121
-STN_002                       389             275                    98
-STN_003                        52              41                   487
+        Sp_1 Sp_2 Sp_10 Sp_12 Sp_13 Sp_27
+STN_001   34  154  3922  2552  1051   738
+STN_002 1280  189  1366     0   526  1053
+STN_003 1665  878   606   687   712  1018
 ```
 
 Each number is the count of sequencing reads assigned to that taxon in that
@@ -171,10 +171,10 @@ head(data$covariates)
 ```
 
 ```
-  sample_id latitude depth year depth_bin
-1   STN_001    39.10    50 2019   shallow
-2   STN_002    39.22    50 2021   shallow
-...
+  SampleID TrueCommunity    Depth Distance_shore sample_id
+1        1             1 86.25497       201.9523   STN_001
+2        2             1 73.32899       197.4781   STN_002
+3        3             1 75.75906       208.2311   STN_003
 ```
 
 **Critical:** the covariate data frame must have exactly the same number of
@@ -244,7 +244,7 @@ distinct communities?"
 
 ```{r fit_k2}
 # Select which covariates to use
-covariate_matrix <- data$covariates[, c("latitude", "depth")]
+covariate_matrix <- data$covariates[, c("Depth", "Distance_shore")]
 
 # Fit a K=2 DMM
 fit_k2 <- eDNA_dmm(
@@ -259,7 +259,7 @@ console. This is normal. A single chain of 4000 iterations (2000 warmup)
 typically takes 1–5 minutes depending on N and S.
 
 ```r
-## Fitting DMM: N=60 samples, S=25 taxa, K=2 communities, P=2 covariates
+## Fitting DMM: N=20 samples, S=33 taxa, K=2 communities, P=2 covariates
 ## MCMC: 1 chain(s), 4000 iterations (2000 warmup, 2000 sampling)
 ## Note: Using single chain (recommended for mixture models)
 ## ...
@@ -291,7 +291,7 @@ eDNA Dirichlet-Multinomial Mixture Model
   K (communities)  : 2
   N (samples)      : 60
   S (taxa)         : 25
-  Covariates       : latitude, depth
+  Covariates       : Depth, Distance_shore
   Mean alpha       : 2.84
 
 Community sizes (MAP assignment):
@@ -342,6 +342,54 @@ fit_k2$beta_summary
 fit_k2$alpha_mean
 ```
 
+# Replicated samples
+
+If a station was sequenced more than once — PCR replicates, or separate bottles
+from the same water — give each replicate its own row of `counts` and use
+`station_id` to say which rows belong together. **Do not sum them.**
+
+```{r replicates, eval=FALSE}
+fit_rep <- eDNA_dmm(
+  counts     = rep_counts,   # one row per replicate
+  station_id = station_id,   # which rows belong to the same station
+  covariates = station_covs, # station-level covariates
+  K          = 4
+)
+
+fit_rep$theta_mean   # posterior mean composition of each station
+fit_rep$phi_mean     # replicate reproducibility
+```
+
+This switches to a hierarchical model with a composition `theta_i` per station:
+
+```
+theta_i ~ Dirichlet(alpha * pi_k)                      # the station's composition
+y_ir    ~ DirichletMultinomial(N_ir, phi * theta_i)    # each replicate
+```
+
+giving two dispersion parameters that answer different questions — `alpha` for
+how tightly *stations* cluster around their community, and `phi` for how tightly
+*replicates* cluster around their own station.
+
+**Why not just sum the replicates?** Summing would be lossless if replicates were
+plain multinomial draws from the station's composition. They are informative
+precisely *because* they are overdispersed relative to multinomial (PCR
+jackpotting, uneven template, bottle effects). That scatter is the signal, and
+summing discards it.
+
+Ragged replication is fine — stations may have different numbers of replicates,
+and a station with only one is still fitted normally. If *no* station has more
+than one replicate, `alpha` and `phi` are not separately identified, so
+`eDNA_dmm()` falls back to the standard model and tells you. Leave `station_id`
+unset whenever each row is an independent sample; that is the standard model and
+the right choice for unreplicated data.
+
+> The full tutorial (`vignette("tutorial")`) works through a complete replicated
+> survey — simulating it, reshaping it into model input, fitting it, and checking
+> parameter recovery for `phi`.
+
+---
+
 ---
 
 # Choosing K: How many communities?
@@ -352,7 +400,7 @@ and compare them using Leave-One-Out cross-validation (LOO-CV).
 
 ## Using eDNA_loo()
 
-```{r loo, cache=TRUE}
+```{r loo}
 # Fit K=2 through K=5 and compare (this takes several minutes)
 loo_result <- eDNA_loo(
   counts     = data$counts,
@@ -397,7 +445,7 @@ true number of communities.
 Once you have chosen K, fit the final model with more iterations for better
 posterior summaries:
 
-```{r fit_final, cache=TRUE}
+```{r fit_final}
 fit <- eDNA_dmm(
   counts     = data$counts,
   covariates = covariate_matrix,
@@ -411,13 +459,22 @@ fit <- eDNA_dmm(
 
 # Visualization
 
-All three visualization functions return `ggplot2` objects. This means you
+All four visualization functions return `ggplot2` objects. This means you
 can:
 
 1. Print them directly to see the plot
 2. Save them with `ggsave()`
 3. Modify them by adding ggplot2 layers
 4. Combine them with `cowplot::plot_grid()` or `patchwork`
+
+> **One exception.** `eDNA_dmm_structure()` and `plot_true_compositions()`
+> return a *cowplot grid* object rather than a ggplot when `facet_row_var` is
+> supplied, because they build one sub-plot per row level to keep panel widths
+> proportional to sample count. Adding ggplot2 layers with `+` will not work on
+> those; style them through the functions' own arguments instead. Both also take
+> a large set of layout arguments — two-way faceting, row labels, legend
+> geometry, reference lines — that are covered in
+> `vignette("tutorial")` under *Publication layouts*.
 
 ## Structure plot
 
@@ -431,30 +488,30 @@ eDNA_dmm_structure(fit)
 ```
 
 ```{r structure_faceted}
-# Faceted by depth bin, sorted by latitude within each panel
+# Faceted by true community, sorted by depth within each panel
 p_structure <- eDNA_dmm_structure(
   fit,
   metadata  = data$covariates,   # pass your metadata data frame
-  facet_var = "depth_bin",       # one panel per depth stratum
-  sort_var  = "latitude"         # sort samples by latitude within each panel
+  facet_var = "TrueCommunity",   # one panel per true community
+  sort_var  = "Depth"            # sort samples by depth within each panel
 )
 p_structure
 ```
 
 The structure plot is best read by looking for **vertical patterns** (samples
 dominated by a single color) and **transitions** (where one community gives
-way to another along the sorting axis). When sorted by latitude and faceted by
-depth, you should see Community 1 dominating shallow-southern samples,
-Community 2 dominating deep-northern samples, and Community 3 appearing in
-intermediate positions.
+way to another along the sorting axis). In the example dataset the four
+communities are separated by depth and distance from shore, so sorting by
+`Depth` within each true-community panel should give panels that are each
+dominated by a single colour.
 
 ```{r structure_custom_colors}
 # Use custom community colors
 p_structure_custom <- eDNA_dmm_structure(
   fit,
   metadata         = data$covariates,
-  facet_var        = "depth_bin",
-  sort_var         = "latitude",
+  facet_var        = "TrueCommunity",
+  sort_var         = "Depth",
   community_colors = c(
     "Community 1" = "#E63946",
     "Community 2" = "#457B9D",
@@ -484,6 +541,33 @@ p_structure +
     plot.title = element_text(size = 16)
   )
 ```
+## Community compositions
+
+Where the structure plot answers "which community does each *sample* belong
+to?", `eDNA_dmm_compositions()` answers "what does each *community* look like
+in species space?" — the posterior mean composition of each community.
+
+```{r compositions}
+eDNA_dmm_compositions(
+  fit,
+  top_n           = 20,       # show the top 20 taxa; rest pooled into "Other"
+  legend_position = "right"
+)
+```
+
+Colours are shared with `plot_true_compositions()` and `eDNA_dmm_structure()`,
+so the same taxon keeps the same colour across plots. That sharing is only
+automatic when the plots are drawn from the same taxon set — if you put an
+observed-composition plot next to a fitted one, rank the taxa once and pass the
+same set to both:
+
+```{r compositions_shared, eval=FALSE}
+taxa <- dmm_taxon_order(fit, top_n = 20)
+
+plot_true_compositions(data$counts, taxa_include = taxa)
+eDNA_dmm_compositions(fit, top_n = 20)
+```
+
 
 ## NMDS ordination
 
@@ -603,7 +687,7 @@ install.packages("cowplot")
 library(cowplot)
 
 p1 <- eDNA_dmm_structure(fit, metadata = data$covariates,
-                          facet_var = "depth_bin", sort_var = "latitude")
+                          facet_var = "TrueCommunity", sort_var = "Depth")
 p2 <- eDNA_dmm_nmds(fit)$plot
 p3 <- eDNA_dmm_beta(fit)$plot
 

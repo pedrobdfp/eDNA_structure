@@ -13,7 +13,6 @@ Description: Fits Bayesian Dirichlet-Multinomial Mixture (DMM) models to
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.3
 Depends:
     R (>= 4.1.0)
 Imports:
@@ -42,3 +41,4 @@ VignetteBuilder: knitr
 LazyData: true
 URL: https://github.com/pedrobdfp/eDNA_structure
 BugReports: https://github.com/pedrobdfp/eDNA_structure/issues
+Config/roxygen2/version: 8.0.0

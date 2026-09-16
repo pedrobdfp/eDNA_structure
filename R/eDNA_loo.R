@@ -126,7 +126,7 @@ eDNA_loo <- function(
     ggplot2::labs(
       x        = "K (number of communities)",
       y        = "LOO-ELPD (higher is better)",
-      title    = "K selection — LOO cross-validation",
+      title    = "K selection - LOO cross-validation",
       subtitle = "Shaded band = \u00b11 SE  |  Elbow = point of diminishing returns"
     ) +
     ggplot2::theme_bw(base_size = 13) +

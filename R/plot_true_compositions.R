@@ -39,7 +39,13 @@
 #' @param base_size Base font size. Default `11`.
 #' @param title Plot title. Default auto-generated.
 #' @param subtitle Plot subtitle. Default auto-generated.
+#' @param show_legend Logical. Show the taxon legend. Default `FALSE` - a
+#'   full taxon legend is usually too large to be useful on this plot.
 #' @param legend_position Legend position. Default `"bottom"`.
+#' @param panel_labels Logical. Label each row-facet panel with a lowercase
+#'   letter. Default `TRUE`. Set `FALSE` when the plot is itself a panel of a
+#'   larger composite figure, where the outer figure supplies the letters and
+#'   an inner set would collide with them.
 #' @param vline_var Numeric column for vertical reference line. Default `NULL`.
 #' @param vline_value Threshold value in `vline_var` space. Default `NULL`.
 #' @param vline_color Line color. Default `"black"`.

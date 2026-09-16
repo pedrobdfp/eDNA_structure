@@ -1,30 +1,45 @@
 test_that("get_example_data() returns the correct structure", {
   d <- get_example_data()
   expect_type(d, "list")
-  expect_named(d, c("counts", "covariates", "true_params"), ignore.order = TRUE)
+  expect_named(
+    d,
+    c("counts", "covariates", "community_compositions",
+      "metab_df", "sample_metadata", "contributors"),
+    ignore.order = TRUE
+  )
+
   expect_true(is.matrix(d$counts))
-  expect_equal(nrow(d$counts), 60L)
-  expect_equal(ncol(d$counts), 25L)
+  expect_equal(nrow(d$counts), 20L)
+  expect_gt(ncol(d$counts), 1L)
+
   expect_s3_class(d$covariates, "data.frame")
-  expect_equal(nrow(d$covariates), 60L)
-  expect_true(all(c("sample_id", "latitude", "depth", "year", "depth_bin") %in%
+  expect_equal(nrow(d$covariates), 20L)
+  expect_true(all(c("sample_id", "TrueCommunity", "Depth", "Distance_shore") %in%
                     names(d$covariates)))
+
+  # Ground truth is kept at full taxon width; all-zero taxa are dropped from
+  # `counts`, so the two need not share a column count.
+  expect_true(is.matrix(d$community_compositions))
+  expect_equal(nrow(d$community_compositions), 4L)
 })
 
 test_that("validate_counts() catches bad inputs", {
   # Non-matrix input
   expect_error(validate_counts("hello"), "must be a numeric matrix")
 
+  # Fixtures need >= 3 rows and >= 2 cols to clear the dimension checks,
+  # which run before any of the value checks below.
+
   # Negative values
-  bad_counts <- matrix(c(1L, -1L, 2L, 3L), nrow = 2)
+  bad_counts <- matrix(c(1L, -1L, 2L, 3L, 4L, 5L), nrow = 3)
   expect_error(validate_counts(bad_counts), "negative values")
 
   # NA values
-  na_counts <- matrix(c(1L, NA_integer_, 2L, 3L), nrow = 2)
+  na_counts <- matrix(c(1L, NA_integer_, 2L, 3L, 4L, 5L), nrow = 3)
   expect_error(validate_counts(na_counts), "NA value")
 
-  # Empty sample
-  empty_counts <- matrix(c(0L, 0L, 2L, 3L), nrow = 2)
+  # Empty sample (row 1 sums to zero)
+  empty_counts <- matrix(c(0L, 1L, 2L, 0L, 4L, 5L), nrow = 3)
   expect_error(validate_counts(empty_counts), "zero total reads")
 
   # Too few samples

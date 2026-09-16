@@ -1,26 +1,8 @@
 # =============================================================================
 # eDNA_dmm_compositions() — posterior community composition bar plots
+# dmm_taxon_order()      — shared taxon ranking driving both composition plots
 # =============================================================================
 
-#' Plot posterior mean species composition for each community
-#'
-#' @description
-#' Produces a stacked bar plot of the **posterior mean species composition**
-#' for each fitted community (the pi matrix). One bar per community, colored
-#' by species using the same structured palette as [plot_true_compositions()],
-#' so species colors are directly comparable between the two plots.
-#'
-#' @param fit An `edna_dmm_fit` object from [eDNA_dmm()].
-#' @param top_n Number of most abundant taxa to show individually; the rest
-#'   are collapsed into `"Other"`. Default `20`.
-#' @param base_size Base font size. Default `13`.
-#' @param title Plot title. Default auto-generated.
-#' @param subtitle Plot subtitle. Default auto-generated.
-#' @param legend_position Legend position. Default `"right"`.
-#' @param bar_width Bar width. Default `0.7`.
-#'
-#' @return A [ggplot2::ggplot()] object.
-#'
 #' Rank taxa by their weight in a fitted model
 #'
 #' @description
@@ -52,6 +34,24 @@ dmm_taxon_order <- function(fit, top_n = NULL) {
   if (is.null(top_n)) ranked else ranked[seq_len(min(top_n, length(ranked)))]
 }
 
+#' Plot posterior mean species composition for each community
+#'
+#' @description
+#' Produces a stacked bar plot of the **posterior mean species composition**
+#' for each fitted community (the pi matrix). One bar per community, colored
+#' by species using the same structured palette as [plot_true_compositions()],
+#' so species colors are directly comparable between the two plots.
+#'
+#' @param fit An `edna_dmm_fit` object from [eDNA_dmm()].
+#' @param top_n Number of most abundant taxa to show individually; the rest
+#'   are collapsed into `"Other"`. Default `20`.
+#' @param base_size Base font size. Default `13`.
+#' @param title Plot title. Default auto-generated.
+#' @param subtitle Plot subtitle. Default auto-generated.
+#' @param legend_position Legend position. Default `"right"`.
+#' @param bar_width Bar width. Default `0.7`.
+#'
+#' @return A [ggplot2::ggplot()] object.
 #' @seealso [plot_true_compositions()], [eDNA_dmm_structure()]
 #' @export
 eDNA_dmm_compositions <- function(
@@ -108,7 +108,7 @@ eDNA_dmm_compositions <- function(
   # ── Titles ─────────────────────────────────────────────────────────────────
   title_str    <- title    %||% sprintf("Posterior community compositions  (K = %d)", K)
   subtitle_str <- subtitle %||% sprintf(
-    "Posterior mean π  |  top %d taxa  |  colors match observed composition plot",
+    "Posterior mean pi  |  top %d taxa  |  colors match observed composition plot",
     min(top_n, ncol(pi_mean))
   )
   

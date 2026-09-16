@@ -331,7 +331,7 @@ ggsave("raw_compositions.png", p_raw, width = 10, height = 4, dpi = 300)
 
 ## Basic fit
 
-```{r fit, cache=TRUE}
+```{r fit}
 fit4 <- eDNA_dmm(
   counts     = counts,
   covariates = cov_matrix,
@@ -523,7 +523,7 @@ nrow(station_cov)   # one row per station
 
 Passing `station_id` is the only change:
 
-```{r fit_reps, cache=TRUE}
+```{r fit_reps}
 fit_rep <- eDNA_dmm(
   counts     = rep_counts,
   station_id = station_id,     # <- this switches on the hierarchical model
@@ -627,7 +627,7 @@ predictive performance. Look for the "elbow" where gains flatten.
 > (`rowsum(rep_counts, station_id)`), then refit once at the chosen K with
 > `station_id` supplied for your final estimates.
 
-```{r loo, cache=TRUE}
+```{r loo}
 loo_result <- eDNA_loo(
   counts     = counts,
   covariates = cov_matrix,
@@ -812,6 +812,166 @@ p_struct_colors +
 
 ```{r struct_save}
 ggsave("structure_plot.png", p_struct_colors, width = 10, height = 4, dpi = 300)
+```
+
+## Publication layouts — rows, labels and legends
+
+`plot_true_compositions()` and `eDNA_dmm_structure()` share one layout engine, so
+the two can be stacked into a single figure whose panels line up exactly. This
+section covers the arguments that matter once a plot stops being a quick look and
+starts being a manuscript figure.
+
+### Two-way panels and why they are built with cowplot
+
+`facet_var` makes panel **columns**; `facet_row_var` makes panel **rows**. When
+`facet_row_var` is supplied, one sub-plot is built per row level and the sub-plots
+are stacked with cowplot, rather than using a single `facet_grid()`.
+
+That is deliberate. It is the only arrangement that keeps panel widths
+proportional to the number of samples in each panel (via `space = "free_x"`), so a
+stratum with 30 samples is drawn three times wider than one with 10 instead of
+both being stretched to equal width.
+
+```{r layout_two_way, eval=FALSE}
+eDNA_dmm_structure(
+  fit,
+  metadata      = meta,
+  facet_var     = "year",        # columns
+  facet_row_var = "depth_bin",   # rows
+  sort_var      = "Depth"
+)
+```
+
+There is one consequence worth knowing before you build a figure around it:
+
+```{r layout_cowplot_gotcha, eval=FALSE}
+# WITHOUT facet_row_var -> a ggplot object, so ggplot2 layers can be added:
+p <- eDNA_dmm_structure(fit, metadata = meta)
+p + labs(caption = "works fine")
+
+# WITH facet_row_var -> a cowplot grid object. `+ theme(...)` will NOT work.
+# Style it through the function's own arguments instead (base_size,
+# strip_text_size, axis_text_size, row_label_size, ylab_size ...).
+p2 <- eDNA_dmm_structure(fit, metadata = meta, facet_row_var = "depth_bin")
+# p2 + labs(...)   # <- error
+```
+
+### Row labels that generalize — `row_label_fn`
+
+Each row panel gets a label derived from its `facet_row_var` level. `row_label_fn`
+is the formatter applied to that level, which is what lets the same code produce
+sensible labels for depth, year, site or season:
+
+```{r layout_row_labels, eval=FALSE}
+# depth_bin values 10, 50, 200 -> "10 m", "50 m", "200 m"
+row_label_fn = function(x) paste0(x, " m")
+
+# year values 2021, 2022 -> "Year: 2021", "Year: 2022"
+row_label_fn = function(x) paste0("Year: ", x)
+```
+
+`row_label_position` decides where that label is drawn:
+
+- `"title"` (default) — a bold label above each row's panel.
+- `"ylab"` — folded into the y-axis label, which was the older, hardcoded behavior.
+
+With `"title"`, the y-axis label is drawn once for the whole stack and is taken
+from `ylab` (`"Proportion"` for `plot_true_compositions()`,
+`"Membership probability"` for `eDNA_dmm_structure()`).
+
+### Legends that fit
+
+Taxon legends get large quickly. `legend_nrow` / `legend_ncol` set the shape,
+`legend_key_size` and `legend_text_size` set the scale, and `legend_rel_height` /
+`legend_rel_width` decide how much of the figure the legend is allowed to occupy.
+
+```{r layout_legend, eval=FALSE}
+plot_true_compositions(
+  counts,
+  metadata          = meta,
+  facet_row_var     = "depth_bin",
+  show_legend       = TRUE,
+  legend_position   = "bottom",
+  legend_ncol       = 7,      # one colour family per column (see n_hues)
+  legend_key_size   = 0.35,
+  legend_text_size  = 7,
+  legend_rel_height = 0.22    # give the legend room — see the warning below
+)
+```
+
+Taxa are laid out hue block by hue block, `n_hues` families in total (default 7),
+so setting `legend_ncol = n_hues` puts roughly one colour family per column and
+makes a 20-taxon legend scannable.
+
+> **Watch out:** `legend_rel_height` is a hard allocation, not a minimum. The
+> legend receives exactly that fraction of the figure and any rows that do not fit
+> are **clipped silently**. If legend entries seem to have vanished, raise
+> `legend_rel_height` — the taxa are still in the plot.
+
+### Nesting a plot inside a bigger figure — `panel_labels`
+
+By default each row panel is lettered (a, b, c…). When the plot is itself one
+panel of a larger composite, turn that off so the inner letters do not collide
+with the outer ones:
+
+```{r layout_panel_labels, eval=FALSE}
+eDNA_dmm_structure(fit, metadata = meta, facet_row_var = "depth_bin",
+                   panel_labels = FALSE)
+```
+
+### Making both plots share one taxon palette — `taxa_include`
+
+The taxon palette is a deterministic function of the sorted taxon set: the same
+set in gives the same colours out. So if the observed plot picks its own top 20
+and the fitted plot independently picks its own, the two sets differ and any
+shared taxon is drawn in **two different colours**. `dmm_taxon_order()` exists to
+prevent that — rank once, pass the same set to both:
+
+```{r layout_shared_palette, eval=FALSE}
+taxa <- dmm_taxon_order(fit, top_n = 20)
+
+common <- list(
+  metadata      = meta,
+  facet_var     = "year",
+  facet_row_var = "depth_bin",
+  sort_var      = "Depth",
+  row_label_fn  = function(x) paste0(x, " m"),
+  base_size     = 11
+)
+
+p_obs <- do.call(plot_true_compositions,
+                 c(list(counts, taxa_include = taxa), common))
+p_fit <- do.call(eDNA_dmm_structure,
+                 c(list(fit, panel_labels = FALSE), common))
+
+cowplot::plot_grid(p_obs, p_fit, ncol = 1, rel_heights = c(1, 1))
+```
+
+See *Multi-panel publication figures* below for assembling and saving the
+finished figure - in particular, use `cowplot::save_plot()` rather than
+`ggsave()` for anything built with `plot_grid()`.
+
+Note that `dmm_taxon_order()` ranks taxa by total posterior weight across
+communities (`colSums(pi_mean)`), *not* by mean observed frequency. A taxon that
+dominates a single community ranks highly even when it is rare overall — which is
+the ordering you want when the figure's job is to show what distinguishes the
+communities from one another.
+
+### Reference lines — `vline_*`
+
+Draws a vertical line where a numeric covariate crosses a threshold, once samples
+have been sorted along the x-axis:
+
+```{r layout_vline, eval=FALSE}
+plot_true_compositions(
+  counts,
+  metadata        = meta,
+  sort_var        = "Depth",
+  vline_var       = "Depth",   # column the threshold is measured in
+  vline_value     = 200,       # the threshold itself
+  vline_linetype  = "dashed",
+  vline_linewidth = 0.7
+)
 ```
 
 ## Posterior community compositions — `eDNA_dmm_compositions()`
