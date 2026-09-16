@@ -15,7 +15,7 @@
 #'     (`STN_001`–`STN_020`), columns are species (`Sp_1`–`Sp_40`).}
 #'   \item{`covariates`}{Data frame (20 rows): `sample_id`, `TrueCommunity`,
 #'     `Depth` (m), `Distance_shore` (arbitrary units).}
-#'   \item{`community_compositions`}{True [4 × 40] composition matrix.}
+#'   \item{`community_compositions`}{True `4 × 40` composition matrix.}
 #'   \item{`metab_df`}{Raw metabarcoding data frame from the simulation.}
 #'   \item{`sample_metadata`}{Full simulation metadata.}
 #'   \item{`contributors`}{Contributor simulation output.}

@@ -41,6 +41,43 @@
 #' `alpha` means lower overdispersion (counts are more multinomial-like).
 #' Typical eDNA data have `alpha` in the range 1–5.
 #'
+#' @section Replicated samples:
+#' If a station was sequenced more than once (PCR or bottle replicates), pass
+#' each replicate as its own row of `counts` and use `station_id` to say which
+#' rows belong together. This switches to a hierarchical model that estimates
+#' each station's own composition:
+#'
+#' - Station composition: `theta_i ~ Dirichlet(alpha * pi_k)`
+#' - Replicate counts: `y_ir ~ DirichletMultinomial(N_ir, phi * theta_i)`
+#'
+#' There are then two dispersion parameters answering two different questions:
+#' `alpha` (how tightly stations cluster around their community) and `phi` (how
+#' tightly replicates cluster around their own station). The posterior mean
+#' station compositions are returned as `theta_mean`.
+#'
+#' **Why not just sum the replicates?** Summing would be lossless if replicates
+#' were plain multinomial draws from the station's composition — their sum is a
+#' sufficient statistic, and the summed model is exactly what you get. Replicates
+#' are informative precisely because they are *overdispersed* relative to
+#' multinomial (PCR jackpotting, uneven template). Replicate concordance versus
+#' scatter is the signal, and summing discards it.
+#'
+#' Replication may be ragged: stations can have different numbers of replicates,
+#' and stations with a single replicate are fully supported — their `theta_i` is
+#' informed by that replicate plus shrinkage toward `alpha * pi_k`, using a `phi`
+#' learned from the replicated stations. If *no* station has more than one
+#' replicate, `alpha` and `phi` are not separately identified, so `eDNA_dmm()`
+#' simply uses the standard model instead and says so.
+#'
+#' `covariates` remain **station-level**: supply either one row per station (in
+#' order of first appearance in `station_id`) or one row per row of `counts`, in
+#' which case they are collapsed automatically. A covariate that varies between
+#' replicates of the same station is an error, since the model has no
+#' replicate-level covariate term.
+#'
+#' Note that [eDNA_loo()] deliberately stays on the standard summed model for
+#' K selection — see its documentation.
+#'
 #' @section Single-chain recommendation:
 #' By default, `eDNA_dmm()` fits a **single MCMC chain** (`chains = 1`).
 #' This is intentional. Mixture models suffer from *label switching*: across
@@ -58,14 +95,22 @@
 #'   \item{`sample_info`}{Data frame: one row per sample with posterior
 #'     community membership probabilities (`prob_comm1`, `prob_comm2`, ...),
 #'     MAP assignment (`z_hat`), and assignment certainty.}
-#'   \item{`pi_mean`}{Matrix [K × S]: posterior mean community compositions.
+#'   \item{`pi_mean`}{Matrix `K × S`: posterior mean community compositions.
 #'     `pi_mean[k, j]` = posterior mean relative frequency of taxon `j` in
 #'     community `k`.}
 #'   \item{`beta_summary`}{Data frame: posterior summaries for each softmax
 #'     regression coefficient (mean, 90% CI, P(direction), ESS).}
 #'   \item{`alpha_mean`}{Scalar: posterior mean of the overdispersion parameter.}
+#'   \item{`replicate`}{Logical: whether the replicate-aware model was used.}
+#'   \item{`theta_mean`}{Matrix `N × S` of posterior mean **station**
+#'     compositions, or `NULL` when the standard model was used. Only available
+#'     from the replicate model — the summed model has no station-level
+#'     composition parameter.}
+#'   \item{`phi_mean`}{Scalar: posterior mean replicate-level dispersion, or
+#'     `NULL` when the standard model was used.}
 #'   \item{`K`}{Number of communities fitted.}
-#'   \item{`N`}{Number of samples.}
+#'   \item{`N`}{Number of samples — stations, when the replicate model is used.}
+#'   \item{`R`}{Number of replicate rows (equals `N` for the standard model).}
 #'   \item{`S`}{Number of taxa.}
 #'   \item{`taxa_names`}{Character vector of taxon names (column names of `counts`).}
 #'   \item{`covariate_names`}{Character vector of covariate names.}
@@ -86,6 +131,12 @@
 #' @param K A single positive integer ≥ 2: the number of latent communities.
 #'   If you are unsure, start with `K = 2` and increase. The function
 #'   [eDNA_loo()] can help compare models across values of K.
+#' @param station_id Optional vector of station labels, one per **row** of
+#'   `counts`, identifying which rows are replicates of the same station. Rows
+#'   sharing a label are treated as replicates. Leave as `NULL` (the default)
+#'   when each row of `counts` is an independent sample — this is the standard,
+#'   fully identified model and the right choice for unreplicated data. See the
+#'   **Replicated samples** section.
 #' @param scale_covariates Logical. If `TRUE` (the default), covariates are
 #'   Z-score standardized (mean = 0, SD = 1) before fitting. This is
 #'   **strongly recommended** because it (a) improves MCMC mixing,
@@ -129,6 +180,14 @@
 #' @param alpha_rate A positive number: the rate parameter of the Gamma
 #'   prior on `alpha`. Default is `2`. Prior mean = `alpha_shape / alpha_rate`
 #'   = 2.5. Adjust if you have strong prior information about overdispersion.
+#' @param phi_shape A positive number: shape of the Gamma prior on the
+#'   replicate-level dispersion `phi`. Default is `2`. Only used when
+#'   `station_id` is supplied.
+#' @param phi_rate A positive number: rate of the Gamma prior on `phi`.
+#'   Default is `0.02`, giving a diffuse prior with mean 100 — deliberately much
+#'   larger than the prior mean for `alpha`, because replicates of one station
+#'   are usually far more similar to each other than different stations are.
+#'   Only used when `station_id` is supplied.
 #' @param verbose Logical. If `TRUE` (the default), print Stan compilation and
 #'   sampling progress. Set to `FALSE` for silent fitting (useful in loops
 #'   over multiple K values).
@@ -165,6 +224,17 @@
 #'   covariates = NULL,
 #'   K          = 2
 #' )
+#'
+#' # Replicated data: each row of `counts` is one replicate, and `station_id`
+#' # says which rows belong to the same station. Covariates stay station-level.
+#' fit_rep <- eDNA_dmm(
+#'   counts     = replicate_counts,
+#'   station_id = replicate_meta$station,
+#'   covariates = station_covariates,
+#'   K          = 2
+#' )
+#' fit_rep$theta_mean   # posterior mean composition of each station
+#' fit_rep$phi_mean     # replicate reproducibility
 #' }
 #'
 #' @export
@@ -172,6 +242,7 @@ eDNA_dmm <- function(
     counts,
     covariates      = NULL,
     K               = 2,
+    station_id      = NULL,
     scale_covariates = TRUE,
     chains          = 1,
     iter            = 4000,
@@ -182,19 +253,48 @@ eDNA_dmm <- function(
     conc            = 0.5,
     alpha_shape     = 5,
     alpha_rate      = 2,
+    phi_shape       = 2,
+    phi_rate        = 0.02,
     verbose         = TRUE
 ) {
   cl <- match.call()
-  
+
   # ── Input validation ────────────────────────────────────────────────────────
   counts     <- validate_counts(counts)
-  K          <- validate_K(K, nrow(counts))
-  
+
+  # ── Replicate structure (optional) ──────────────────────────────────────────
+  station <- NULL
+  if (!is.null(station_id)) {
+    station <- validate_station_id(station_id, counts)
+
+    if (isTRUE(station$fallback)) {
+      # No station has more than one replicate. alpha and phi would not be
+      # separately identified, and the replicate model buys nothing here: with
+      # one replicate per station the standard model IS the correct model.
+      if (verbose) {
+        message("Every station in `station_id` has exactly 1 replicate.")
+        message("Using the standard model, which is the correct model for unreplicated data.")
+      }
+      # Keep the station labels as sample IDs if the matrix has none.
+      if (is.null(rownames(counts))) rownames(counts) <- station$levels
+      station <- NULL
+    }
+  }
+  replicate_model <- !is.null(station)
+
+  # Number of ecological units the mixture is over: stations, not replicates.
+  N_units <- if (replicate_model) station$n_stations else nrow(counts)
+  K       <- validate_K(K, N_units)
+
   # Drop all-zero taxa silently after warning in validate_counts
   counts <- counts[, colSums(counts) > 0, drop = FALSE]
-  
-  covariates <- validate_covariates(covariates, counts, scale_covariates)
-  
+
+  if (replicate_model) {
+    covariates <- collapse_station_covariates(covariates, station)
+  }
+  covariates <- validate_covariates(covariates, counts, scale_covariates,
+                                    n_expected = N_units)
+
   # ── Argument checks ──────────────────────────────────────────────────────────
   if (!is.numeric(chains) || chains < 1 || chains != round(chains)) {
     rlang::abort("`chains` must be a positive integer.")
@@ -217,11 +317,20 @@ eDNA_dmm <- function(
   if (!is.numeric(alpha_rate) || alpha_rate <= 0) {
     rlang::abort("`alpha_rate` must be a positive number.")
   }
-  
-  N <- nrow(counts)
+  if (!is.numeric(phi_shape) || phi_shape <= 0) {
+    rlang::abort("`phi_shape` must be a positive number.")
+  }
+  if (!is.numeric(phi_rate) || phi_rate <= 0) {
+    rlang::abort("`phi_rate` must be a positive number.")
+  }
+
+  # N counts ecological units (stations); R counts observed rows (replicates).
+  # They are equal unless the replicate model is in use.
+  N <- N_units
+  R <- nrow(counts)
   S <- ncol(counts)
   P <- ncol(covariates)
-  
+
   # ── Recover scaling info before we lose attributes ───────────────────────────
   scale_info <- NULL
   if (scale_covariates && P > 0) {
@@ -236,32 +345,64 @@ eDNA_dmm <- function(
   
   taxa_names      <- colnames(counts)
   covariate_names <- if (P > 0) colnames(covariates) else character(0)
-  sample_ids      <- rownames(counts)
-  
+  # Sample IDs label ecological units, so with replicates they are stations.
+  sample_ids      <- if (replicate_model) station$levels else rownames(counts)
+
   # ── Build Stan data list ─────────────────────────────────────────────────────
   cov_matrix <- if (P > 0) covariates else matrix(numeric(0), nrow = N, ncol = 0)
-  
-  stan_data <- list(
-    N           = N,
-    S           = S,
-    K           = K,
-    P           = P,
-    X           = counts,
-    covariates  = cov_matrix,
-    conc        = conc,
-    alpha_shape = alpha_shape,
-    alpha_rate  = alpha_rate
-  )
-  
+
+  if (replicate_model) {
+    stan_data <- list(
+      N           = N,
+      R           = R,
+      S           = S,
+      K           = K,
+      P           = P,
+      X           = counts,
+      station     = station$index,
+      covariates  = cov_matrix,
+      conc        = conc,
+      alpha_shape = alpha_shape,
+      alpha_rate  = alpha_rate,
+      phi_shape   = phi_shape,
+      phi_rate    = phi_rate
+    )
+    model_name <- "dmm_rep"
+  } else {
+    stan_data <- list(
+      N           = N,
+      S           = S,
+      K           = K,
+      P           = P,
+      X           = counts,
+      covariates  = cov_matrix,
+      conc        = conc,
+      alpha_shape = alpha_shape,
+      alpha_rate  = alpha_rate
+    )
+    model_name <- "dmm"
+  }
+
   # ── Fit using lazily-compiled, disk-cached Stan model ────────────────────────
-  # .get_dmm_stanmodel() (see R/stanmodels.R) compiles the model from
-  # inst/stan/dmm.stan on first use and caches it to disk. No precompiled
-  # Rcpp Module is shipped in the package's compiled code.
+  # .get_stanmodel() (see R/stanmodels.R) compiles the model from inst/stan on
+  # first use and caches it to disk. No precompiled Rcpp Module is shipped in
+  # the package's compiled code.
   if (verbose) {
-    message(sprintf(
-      "Fitting DMM: N=%d samples, S=%d taxa, K=%d communities, P=%d covariates",
-      N, S, K, P
-    ))
+    if (replicate_model) {
+      message(sprintf(
+        "Fitting replicate-aware DMM: N=%d stations (%d replicate rows), S=%d taxa, K=%d communities, P=%d covariates",
+        N, R, S, K, P
+      ))
+      message(sprintf(
+        "Replicates per station: min=%d, median=%g, max=%d",
+        min(station$reps), stats::median(as.numeric(station$reps)), max(station$reps)
+      ))
+    } else {
+      message(sprintf(
+        "Fitting DMM: N=%d samples, S=%d taxa, K=%d communities, P=%d covariates",
+        N, S, K, P
+      ))
+    }
     message(sprintf(
       "MCMC: %d chain(s), %d iterations (%d warmup, %d sampling)",
       chains, iter, warmup, iter - warmup
@@ -270,9 +411,9 @@ eDNA_dmm <- function(
       message("Note: Using single chain (recommended for mixture models; see ?eDNA_dmm).")
     }
   }
-  
+
   stan_fit <- rstan::sampling(
-    object  = .get_dmm_stanmodel(),
+    object  = .get_stanmodel(model_name),
     data    = stan_data,
     chains  = chains,
     iter    = iter,
@@ -301,7 +442,21 @@ eDNA_dmm <- function(
   
   alpha_draws <- rstan::extract(stan_fit, pars = "alpha")$alpha
   alpha_mean  <- mean(alpha_draws[seq_len(n_post)])
-  
+
+  # ── Replicate-model extras: station compositions and replicate dispersion ────
+  theta_mean <- NULL
+  phi_mean   <- NULL
+  if (replicate_model) {
+    theta_draws <- rstan::extract(stan_fit, pars = "theta")$theta
+    # theta_draws is [draws, N, S]
+    theta_mean  <- apply(theta_draws[seq_len(n_post), , , drop = FALSE], c(2, 3), mean)
+    colnames(theta_mean) <- taxa_names
+    rownames(theta_mean) <- sample_ids
+
+    phi_draws <- rstan::extract(stan_fit, pars = "phi")$phi
+    phi_mean  <- mean(phi_draws[seq_len(n_post)])
+  }
+
   # ── Sample assignment data frame ──────────────────────────────────────────────
   prob_df    <- as.data.frame(cp_mean)
   colnames(prob_df) <- paste0("prob_comm", seq_len(K))
@@ -331,8 +486,11 @@ eDNA_dmm <- function(
       min(pi_ess), stats::median(pi_ess)
     ))
     message(sprintf("Posterior mean alpha: %.2f", alpha_mean))
+    if (replicate_model) {
+      message(sprintf("Posterior mean phi (replicate dispersion): %.1f", phi_mean))
+    }
   }
-  
+
   # ── Return ─────────────────────────────────────────────────────────────────────
   structure(
     list(
@@ -341,8 +499,15 @@ eDNA_dmm <- function(
       pi_mean         = pi_mean,
       beta_summary    = beta_summary,
       alpha_mean      = alpha_mean,
+      replicate       = replicate_model,
+      theta_mean      = theta_mean,
+      phi_mean        = phi_mean,
+      station_id      = if (replicate_model) station$levels[station$index] else NULL,
+      station_levels  = if (replicate_model) station$levels else NULL,
+      reps_per_station = if (replicate_model) station$reps else NULL,
       K               = K,
       N               = N,
+      R               = R,
       S               = S,
       taxa_names      = taxa_names,
       covariate_names = covariate_names,
@@ -413,16 +578,27 @@ eDNA_dmm <- function(
 
 #' @export
 print.edna_dmm_fit <- function(x, ...) {
+  replicate <- isTRUE(x$replicate)
   cat("eDNA Dirichlet-Multinomial Mixture Model\n")
   cat("=========================================\n")
+  if (replicate) cat("  Model            : replicate-aware (hierarchical)\n")
   cat(sprintf("  K (communities)  : %d\n", x$K))
-  cat(sprintf("  N (samples)      : %d\n", x$N))
+  cat(sprintf("  N (%-14s: %d\n", if (replicate) "stations)" else "samples)", x$N))
+  if (replicate) {
+    cat(sprintf("  R (replicates)   : %d (per station: min=%d, max=%d)\n",
+                x$R, min(x$reps_per_station), max(x$reps_per_station)))
+  }
   cat(sprintf("  S (taxa)         : %d\n", x$S))
   cat(sprintf("  Covariates       : %s\n",
               if (length(x$covariate_names) > 0)
                 paste(x$covariate_names, collapse = ", ")
-              else "(none — intercept-only)"))
-  cat(sprintf("  Mean alpha       : %.2f\n", x$alpha_mean))
+              else "(none - intercept-only)"))
+  cat(sprintf("  Mean alpha       : %.2f%s\n", x$alpha_mean,
+              if (replicate) "  (station spread around community)" else ""))
+  if (replicate) {
+    cat(sprintf("  Mean phi         : %.1f  (replicate spread around station)\n",
+                x$phi_mean))
+  }
   cat("\nCommunity sizes (MAP assignment):\n")
   tbl <- table(x$sample_info$z_hat)
   for (nm in names(tbl)) {
@@ -430,15 +606,18 @@ print.edna_dmm_fit <- function(x, ...) {
                 nm, tbl[[nm]], 100 * tbl[[nm]] / x$N))
   }
   cat("\nUse summary() for convergence diagnostics, or pass this object to:\n")
-  cat("  eDNA_dmm_structure()  — structure bar plots\n")
-  cat("  eDNA_dmm_nmds()       — NMDS ordination\n")
-  cat("  eDNA_dmm_beta()       — covariate coefficient plots\n")
+  cat("  eDNA_dmm_structure()  - structure bar plots\n")
+  cat("  eDNA_dmm_nmds()       - NMDS ordination\n")
+  cat("  eDNA_dmm_beta()       - covariate coefficient plots\n")
+  if (replicate) {
+    cat("\n  $theta_mean            - posterior mean composition of each station\n")
+  }
   invisible(x)
 }
 
 #' @export
 summary.edna_dmm_fit <- function(object, ...) {
-  cat("eDNA DMM — Fit Summary\n")
+  cat("eDNA DMM - Fit Summary\n")
   cat("======================\n\n")
   
   cat("Call:\n  ")
@@ -446,11 +625,17 @@ summary.edna_dmm_fit <- function(object, ...) {
   cat("\n")
   
   # Model dimensions
-  cat(sprintf("Dimensions: N=%d samples, S=%d taxa, K=%d communities\n\n",
-              object$N, object$S, object$K))
-  
+  replicate <- isTRUE(object$replicate)
+  if (replicate) {
+    cat(sprintf("Dimensions: N=%d stations, R=%d replicate rows, S=%d taxa, K=%d communities\n\n",
+                object$N, object$R, object$S, object$K))
+  } else {
+    cat(sprintf("Dimensions: N=%d samples, S=%d taxa, K=%d communities\n\n",
+                object$N, object$S, object$K))
+  }
+
   # Alpha (overdispersion)
-  cat("Overdispersion (alpha):\n")
+  cat(if (replicate) "Station-level dispersion (alpha):\n" else "Overdispersion (alpha):\n")
   alpha_draws <- rstan::extract(object$stan_fit, pars = "alpha")$alpha
   cat(sprintf("  Mean = %.2f, Median = %.2f, 90%% CI = [%.2f, %.2f]\n",
               mean(alpha_draws), stats::median(alpha_draws),
@@ -458,7 +643,19 @@ summary.edna_dmm_fit <- function(object, ...) {
               stats::quantile(alpha_draws, 0.95)))
   cat("  (alpha >> 1: low overdispersion / near-multinomial;\n")
   cat("   alpha ~  1: high overdispersion / typical eDNA)\n\n")
-  
+
+  # Phi (replicate-level dispersion), replicate model only
+  if (replicate) {
+    phi_draws <- rstan::extract(object$stan_fit, pars = "phi")$phi
+    cat("Replicate-level dispersion (phi):\n")
+    cat(sprintf("  Mean = %.1f, Median = %.1f, 90%% CI = [%.1f, %.1f]\n",
+                mean(phi_draws), stats::median(phi_draws),
+                stats::quantile(phi_draws, 0.05),
+                stats::quantile(phi_draws, 0.95)))
+    cat("  (large phi: replicates of a station agree closely;\n")
+    cat("   small phi: replicates of a station scatter widely)\n\n")
+  }
+
   # Assignment certainty
   cert <- object$sample_info$assignment_certainty
   cat("Assignment certainty across samples:\n")

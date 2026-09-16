@@ -35,25 +35,29 @@
 #' objects that can be freely customized downstream.
 #'
 #' @docType package
-#' @name eDNA_structure-package
+#' @name eDNAstructure-package
 #' @aliases eDNA_structure
 "_PACKAGE"
 
-#' @importFrom rstan stan extract as.matrix.stanfit
+#' @importFrom rstan stan extract
 #' @importFrom ggplot2 ggplot aes geom_bar geom_point geom_line geom_hline
-#'   geom_vline geom_density geom_linerange stat_ellipse
-#'   scale_fill_manual scale_color_manual scale_x_continuous scale_y_continuous
-#'   scale_size_continuous facet_wrap facet_grid labs theme theme_bw
-#'   element_text element_blank element_rect margin guides guide_legend
-#'   position_dodge expansion coord_fixed
+#' @importFrom ggplot2 geom_vline geom_density geom_linerange stat_ellipse
+#' @importFrom ggplot2 scale_fill_manual scale_color_manual
+#' @importFrom ggplot2 scale_x_continuous scale_y_continuous
+#' @importFrom ggplot2 scale_size_continuous facet_wrap facet_grid labs
+#' @importFrom ggplot2 theme theme_bw element_text element_blank element_rect
+#' @importFrom ggplot2 margin guides guide_legend position_dodge expansion
+#' @importFrom ggplot2 coord_fixed
 #' @importFrom dplyr select filter mutate arrange group_by summarise ungroup
-#'   bind_cols bind_rows left_join distinct pull n across starts_with
-#'   rename slice_max
+#' @importFrom dplyr bind_cols bind_rows left_join distinct pull n across
+#' @importFrom dplyr starts_with rename slice_max
 #' @importFrom tidyr pivot_longer pivot_wider
 #' @importFrom vegan vegdist metaMDS scores
 #' @importFrom posterior ess_bulk as_draws_matrix
 #' @importFrom loo loo extract_log_lik
 #' @importFrom scales percent percent_format pretty_breaks
+#' @importFrom stats reformulate setNames var
+#' @importFrom utils adist
 #' @importFrom rlang .data abort warn inform
 #' @importFrom methods is
 NULL

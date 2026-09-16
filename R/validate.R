@@ -152,8 +152,11 @@ validate_counts <- function(counts, call = rlang::caller_env()) {
 }
 
 #' @keywords internal
-validate_covariates <- function(covariates, counts, scale_covariates, call = rlang::caller_env()) {
-  N <- nrow(counts)
+validate_covariates <- function(covariates, counts, scale_covariates,
+                                n_expected = NULL, call = rlang::caller_env()) {
+  # `n_expected` overrides nrow(counts) for the replicate-aware model, where
+  # covariates are station-level but `counts` has one row per replicate.
+  N <- n_expected %||% nrow(counts)
 
   # ── NULL means intercept-only model ──────────────────────────────────────────
   if (is.null(covariates)) {
@@ -193,8 +196,8 @@ validate_covariates <- function(covariates, counts, scale_covariates, call = rla
   if (nrow(covariates) != N) {
     rlang::abort(
       c(
-        paste0("`covariates` has ", nrow(covariates), " rows but `counts` has ", N, " rows."),
-        i = "Both must have one row per sample, in the same order.",
+        paste0("`covariates` has ", nrow(covariates), " rows but ", N, " were expected."),
+        i = "`covariates` and the samples being modelled must have the same number of rows, one per sample, in the same order.",
         i = "Check that you haven't filtered one object without filtering the other."
       ),
       call = call
@@ -260,6 +263,198 @@ validate_covariates <- function(covariates, counts, scale_covariates, call = rla
   }
 
   covariates
+}
+
+# =============================================================================
+# Replicate structure (station_id)
+# =============================================================================
+
+#' Validate a station_id vector against a replicate-level count matrix
+#'
+#' Returns the information `eDNA_dmm()` needs to build ragged replicate data,
+#' plus a `fallback` flag. `fallback = TRUE` means no station has more than one
+#' replicate, in which case the replicate model's two dispersion parameters
+#' (`alpha`, `phi`) are not separately identified — and the caller should simply
+#' use the standard model, which is the correct model for unreplicated data.
+#'
+#' @return A list with `index` (integer station index per row), `levels`,
+#'   `n_stations`, `reps` (replicates per station) and `fallback`.
+#' @keywords internal
+validate_station_id <- function(station_id, counts, call = rlang::caller_env()) {
+  R <- nrow(counts)
+
+  if (is.matrix(station_id) || is.data.frame(station_id)) {
+    if (ncol(as.data.frame(station_id)) != 1) {
+      rlang::abort(
+        c(
+          "`station_id` must be a vector, not a multi-column object.",
+          i = "Supply one station label per row of `counts`, e.g. `metadata$station`."
+        ),
+        call = call
+      )
+    }
+    station_id <- as.data.frame(station_id)[[1]]
+  }
+
+  if (!is.atomic(station_id)) {
+    rlang::abort(
+      c(
+        "`station_id` must be an atomic vector (character, factor, or numeric).",
+        i = paste0("You supplied an object of class: ",
+                   paste(class(station_id), collapse = ", "))
+      ),
+      call = call
+    )
+  }
+
+  if (length(station_id) != R) {
+    rlang::abort(
+      c(
+        paste0("`station_id` has length ", length(station_id),
+               " but `counts` has ", R, " rows."),
+        i = "There must be exactly one station label per row of `counts`.",
+        i = "With replicates, each row of `counts` is one replicate, and rows from the same station repeat that station's label."
+      ),
+      call = call
+    )
+  }
+
+  if (anyNA(station_id)) {
+    rlang::abort(
+      c(
+        paste0("`station_id` contains ", sum(is.na(station_id)), " NA value(s)."),
+        i = "Every replicate must be assigned to a station.",
+        i = "Drop those rows from `counts` and `station_id` together, or label them."
+      ),
+      call = call
+    )
+  }
+
+  station_chr <- as.character(station_id)
+  # Levels in order of first appearance, so station ordering is stable and
+  # predictable (row 1's station is station 1).
+  levels_ <- unique(station_chr)
+  index   <- match(station_chr, levels_)
+  n_stations <- length(levels_)
+
+  if (n_stations < 2) {
+    rlang::abort(
+      c(
+        paste0("`station_id` identifies only ", n_stations, " station(s)."),
+        i = "The mixture model needs at least 2 stations (ideally many more).",
+        i = "Check that `station_id` labels stations, not replicates: all replicates of one station share a label."
+      ),
+      call = call
+    )
+  }
+
+  reps <- table(factor(station_chr, levels = levels_))
+  max_reps <- max(reps)
+
+  # No replication anywhere: alpha and phi are not separately identified, and
+  # the replicate model would buy the user nothing. Signal a fallback rather
+  # than warning or erroring — unreplicated data stays fully supported.
+  if (max_reps == 1) {
+    return(list(
+      index      = index,
+      levels     = levels_,
+      n_stations = n_stations,
+      reps       = reps,
+      fallback   = TRUE
+    ))
+  }
+
+  n_replicated <- sum(reps > 1)
+  if (n_replicated < 3) {
+    rlang::inform(
+      c(
+        paste0("Only ", n_replicated, " station(s) have more than one replicate."),
+        i = "The replicate-level dispersion `phi` is estimated from replicated stations only, so it will lean heavily on its prior.",
+        i = "Singleton stations are still fitted normally (partial pooling); this is a note, not a problem."
+      )
+    )
+  }
+
+  list(
+    index      = index,
+    levels     = levels_,
+    n_stations = n_stations,
+    reps       = reps,
+    fallback   = FALSE
+  )
+}
+
+#' Collapse replicate-level covariates to one row per station
+#'
+#' Accepts covariates supplied either per station (already `n_stations` rows) or
+#' per replicate (one row per row of `counts`). In the latter case the rows are
+#' collapsed to one per station, erroring if any covariate varies within a
+#' station — the model has no replicate-level covariate term, so such a covariate
+#' could not be used.
+#'
+#' @keywords internal
+collapse_station_covariates <- function(covariates, station, call = rlang::caller_env()) {
+  if (is.null(covariates)) return(NULL)
+
+  n_rows <- if (is.data.frame(covariates)) nrow(covariates) else NROW(covariates)
+
+  # Already station-level: nothing to do.
+  if (n_rows == station$n_stations) return(covariates)
+
+  if (n_rows != length(station$index)) {
+    rlang::abort(
+      c(
+        paste0("`covariates` has ", n_rows, " rows, which matches neither the number of stations (",
+               station$n_stations, ") nor the number of replicate rows (",
+               length(station$index), ")."),
+        i = "Supply covariates either one row per station (in order of first appearance in `station_id`), or one row per row of `counts`.",
+        i = "Covariates are station-level: the model has no replicate-level covariate term."
+      ),
+      call = call
+    )
+  }
+
+  # First row of each station, in station-index order.
+  first_row <- match(seq_len(station$n_stations), station$index)
+  collapsed <- if (is.data.frame(covariates)) {
+    covariates[first_row, , drop = FALSE]
+  } else {
+    covariates[first_row, , drop = FALSE]
+  }
+
+  # Constancy check: a covariate that varies within a station cannot be a
+  # station-level covariate, and silently taking the first value would be wrong.
+  varying <- character(0)
+  col_names <- colnames(covariates)
+  if (is.null(col_names)) col_names <- paste0("column ", seq_len(NCOL(covariates)))
+
+  for (j in seq_len(NCOL(covariates))) {
+    col <- if (is.data.frame(covariates)) covariates[[j]] else covariates[, j]
+    ok <- vapply(split(col, station$index), function(v) {
+      if (length(v) < 2) return(TRUE)
+      if (is.numeric(v)) {
+        isTRUE(all.equal(v, rep(v[1], length(v)), tolerance = 1e-8))
+      } else {
+        all(v == v[1])
+      }
+    }, logical(1))
+    if (!all(ok)) varying <- c(varying, col_names[j])
+  }
+
+  if (length(varying) > 0) {
+    rlang::abort(
+      c(
+        paste0("Covariate(s) vary between replicates of the same station: ",
+               paste(varying, collapse = ", ")),
+        i = "Covariates in this model act on the station's community membership, so they must be constant within a station.",
+        i = "Either aggregate them yourself (e.g. take the station mean) or drop them from `covariates`."
+      ),
+      call = call
+    )
+  }
+
+  if (is.data.frame(collapsed)) rownames(collapsed) <- NULL
+  collapsed
 }
 
 #' @keywords internal
@@ -366,16 +561,42 @@ make_community_colors <- function(k) {
            paste0("Community ", seq_len(k)))
 }
 
+#' Structured taxon palette: hue families, shaded within each
+#'
+#' Taxa are sorted and then laid out hue block by hue block, so neighbouring
+#' names share a hue and differ in lightness. That is what lets a legend of
+#' thirty-odd taxa be read as a handful of colour families rather than as
+#' thirty arbitrary swatches.
+#'
+#' Counts are spread across ALL `n_hues` hues before any shading is added.
+#' The earlier version built a shades-by-hues grid and read it column-major,
+#' which meant a taxon count that the first few hues could absorb left the
+#' last hue unused: 30 taxa became six hues of five shades and the seventh
+#' hue, the pink one, never appeared in any figure.
+#'
+#' @param taxa Character vector of taxon names. `"Other"` is ignored here and
+#'   appended as grey by `include_other`.
+#' @param n_hues Number of hue families. Default `7`.
+#' @param include_other Append `Other = "grey70"`. Default `TRUE`.
+#' @return A named character vector of colours.
 #' @keywords internal
-make_taxa_colors <- function(taxa) {
+make_taxa_colors <- function(taxa, n_hues = 7, include_other = TRUE) {
+  other <- if (isTRUE(include_other)) c("Other" = "grey70") else NULL
   taxa_sorted <- sort(taxa[taxa != "Other"])
-  n           <- length(taxa_sorted)
-  if (n == 0) return(c("Other" = "grey70"))
-  n_shades   <- ceiling(n / 7)
-  base_hues  <- seq(15, 375, length.out = 8)[seq_len(7)]
-  lum_vals   <- seq(75, 40, length.out = n_shades)
-  color_grid <- outer(lum_vals, base_hues,
-                      function(l, h) grDevices::hcl(h = h, c = 80, l = l))
-  c(setNames(as.vector(color_grid)[seq_len(n)], taxa_sorted),
-    "Other" = "grey70")
+  n <- length(taxa_sorted)
+  if (n == 0) return(other)
+
+  n_hues    <- min(n_hues, n)
+  base_hues <- seq(15, 375, length.out = n_hues + 1)[seq_len(n_hues)]
+  # Even split of n taxa over n_hues hues, e.g. 30 over 7 gives 5,4,5,4,4,4,4.
+  per_hue   <- diff(round(seq(0, n, length.out = n_hues + 1)))
+
+  cols <- unlist(lapply(seq_len(n_hues), function(j) {
+    k <- per_hue[[j]]
+    if (k == 0) return(character(0))
+    lum <- if (k == 1) 58 else seq(75, 40, length.out = k)
+    grDevices::hcl(h = base_hues[[j]], c = 80, l = lum)
+  }))
+
+  c(stats::setNames(cols[seq_len(n)], taxa_sorted), other)
 }
