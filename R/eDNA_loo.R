@@ -1,5 +1,5 @@
 # =============================================================================
-# eDNA_loo() — Leave-one-out cross-validation for K selection
+# eDNA_loo(): Leave-one-out cross-validation for K selection
 # =============================================================================
 
 #' Compare DMM models across values of K using LOO cross-validation
@@ -10,12 +10,12 @@
 #' both a comparison table and an elbow plot of LOO-ELPD vs K.
 #'
 #' LOO-ELPD (expected log predictive density) measures how well each model
-#' predicts held-out observations. Higher values are better. The "elbow" —
-#' the point where additional communities yield diminishing LOO-ELPD gains —
+#' predicts held-out observations. Higher values are better. The "elbow", 
+#' the point where additional communities yield diminishing LOO-ELPD gains, 
 #' is a useful heuristic for choosing K.
 #'
 #' @section Replicated data:
-#' `eDNA_loo()` always uses the standard (summed) model — it has no `station_id`
+#' `eDNA_loo()` always uses the standard (summed) model; it has no `replication`
 #' argument. This is deliberate. The replicate-aware model in [eDNA_dmm()] gives
 #' each station its own composition parameter `theta_i`, so holding a station out
 #' leaves that station's own parameter unidentified and station-level LOO is not
@@ -23,9 +23,9 @@
 #' values of K.
 #'
 #' The recommended workflow with replicated data is therefore: select K here on
-#' the summed model, then refit at the chosen K with `station_id` supplied to
+#' the summed model, then refit at the chosen K with `replication` supplied to
 #' [eDNA_dmm()] for the final parameter estimates. If you have replicates, sum
-#' them per station for this step (e.g. `rowsum(rep_counts, station_id)`).
+#' them per station for this step (e.g. `rowsum(rep_counts, replication)`).
 #'
 #' @param counts A count matrix (same as passed to [eDNA_dmm()]).
 #' @param covariates A covariate matrix or data frame, or `NULL`.
@@ -145,7 +145,7 @@ eDNA_loo <- function(
 
 
 # =============================================================================
-# get_example_data() / get_example_replicates() — Built-in example datasets
+# get_example_data() / get_example_replicates(): Built-in example datasets
 # =============================================================================
 
 #' Load the built-in example dataset
@@ -235,26 +235,26 @@ get_example_data <- function() {
 #' Load the built-in replicated example dataset
 #'
 #' @description
-#' The same survey as [get_example_data()], but with three bottle replicates
+#' The same survey as [get_example_data()], but with three replicates
 #' per site instead of one pooled sample. Use it to see how replicated data
 #' should be shaped for the hierarchical model.
 #'
 #' The only structural difference is that `counts` has one row per *replicate*
-#' rather than per site, and a `station_id` vector says which rows belong
+#' rather than per site, and a `replication` vector says which rows belong
 #' together. Do not sum replicates before fitting - see [eDNA_dmm()].
 #'
 #' @section Data format:
 #' \describe{
 #'   \item{`counts`}{Integer matrix, 60 replicates x 33 taxa. Row names are
-#'     `STN_001_B1`, `STN_001_B2`, ... - three bottles per site.}
-#'   \item{`station_id`}{Character vector of length 60 giving the site each
-#'     row belongs to. Pass this as `station_id` to [eDNA_dmm()].}
+#'     `STN_001_B1`, `STN_001_B2`, ... - three replicates per site.}
+#'   \item{`replication`}{Character vector of length 60 giving the site each
+#'     row belongs to. Pass this as `replication` to [eDNA_dmm()].}
 #'   \item{`covariates`}{Data frame, 20 rows x 2 numeric columns. Covariates
 #'     are **station-level**: one row per site, not per replicate.}
 #'   \item{`metadata`}{Data frame, 20 rows, station-level labelling columns.}
 #' }
 #'
-#' @return A named list with elements `counts`, `station_id`, `covariates`
+#' @return A named list with elements `counts`, `replication`, `covariates`
 #'   and `metadata`.
 #'
 #' @seealso [get_example_data()], [eDNA_dmm()]
@@ -264,13 +264,13 @@ get_example_data <- function() {
 #'
 #' dim(r$counts)            # 60 replicates x 33 taxa
 #' r$counts[1:4, 1:5]       # STN_001_B1 .. STN_002_B1
-#' head(r$station_id, 6)    # which site each row came from
+#' head(r$replication, 6)    # which site each row came from
 #' nrow(r$covariates)       # 20 - one row per site, not per replicate
 #'
 #' \dontrun{
 #' fit <- eDNA_dmm(
 #'   counts     = r$counts,
-#'   station_id = r$station_id,
+#'   replication = r$replication,
 #'   covariates = r$covariates,
 #'   K          = 4
 #' )

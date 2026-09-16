@@ -10,7 +10,7 @@ collapse_station_covariates(covariates, station, call = rlang::caller_env())
 Accepts covariates supplied either per station (already \code{n_stations} rows) or
 per replicate (one row per row of \code{counts}). In the latter case the rows are
 collapsed to one per station, erroring if any covariate varies within a
-station — the model has no replicate-level covariate term, so such a covariate
+station, the model has no replicate-level covariate term, so such a covariate
 could not be used.
 }
 \keyword{internal}

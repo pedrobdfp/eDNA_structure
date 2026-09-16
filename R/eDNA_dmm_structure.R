@@ -1,5 +1,5 @@
 # =============================================================================
-# eDNA_dmm_structure() — STRUCTURE-like community assignment bar plots
+# eDNA_dmm_structure(): STRUCTURE-like community assignment bar plots
 # =============================================================================
 
 #' Plot posterior community assignments as STRUCTURE-like bar charts
@@ -14,7 +14,7 @@
 #' (posterior assignment probabilities).
 #'
 #' When `facet_row_var` is supplied, one sub-plot is built per row-level and
-#' assembled vertically with cowplot — the only architecture that keeps panel
+#' assembled vertically with cowplot, the only architecture that keeps panel
 #' widths proportional to sample count via space = "free_x".
 #'
 #' @param fit An `edna_dmm_fit` object from [eDNA_dmm()].
@@ -30,7 +30,7 @@
 #' @param x_text Logical. Show sample labels on x-axis. Default `FALSE`.
 #' @param base_size Base font size. Default `11`.
 #' @param title Plot title. Default auto-generated.
-#' @param subtitle Plot subtitle. Default auto-generated.
+#' @param subtitle Plot subtitle. Default `NULL`, meaning no subtitle.
 #' @param show_legend Logical. Show legend. Default `TRUE`.
 #' @param legend_position Legend position. Default `"bottom"`.
 #' @param legend_nrow Number of legend rows, passed to `guide_legend()`.
@@ -63,7 +63,7 @@
 #' @param legend_text_size Font size of legend labels. Default `NULL`
 #'   (inherits from `base_size`).
 #' @param row_label_fn Function applied to each `facet_row_var` level to
-#'   produce its display label — e.g. `function(x) paste0(x, " m")` for a
+#'   produce its display label, e.g. `function(x) paste0(x, " m")` for a
 #'   depth column, or `function(x) paste0("Year: ", x)` for year.
 #'   Default `as.character` (just prints the raw value).
 #' @param panel_labels Logical. Label each row-facet panel with a lowercase
@@ -140,13 +140,16 @@ eDNA_dmm_structure <- function(
   if (!is.null(metadata)) {
     if (!is.data.frame(metadata))
       rlang::abort("`metadata` must be a data frame.")
-    if (!sample_id_col %in% names(metadata)) {
-      near <- names(metadata)[which.min(adist(sample_id_col, names(metadata),
-                                              ignore.case = TRUE))]
-      rlang::abort(c(paste0("Column '", sample_id_col, "' not found in `metadata`."),
-                     i = paste0("Did you mean '", near, "'?")))
-    }
-    si <- merge(si, metadata, by.x = "sample_id", by.y = sample_id_col, all.x = TRUE)
+    metadata <- as.data.frame(metadata)
+    metadata[[".edna_sample_id"]] <- resolve_metadata_ids(
+      metadata, sample_id_col, si$sample_id
+    )
+    # Drop columns that already exist in `si` so the merge cannot emit .x/.y pairs
+    dup <- setdiff(intersect(names(metadata), names(si)), ".edna_sample_id")
+    if (length(dup))
+      metadata <- metadata[, setdiff(names(metadata), dup), drop = FALSE]
+    si <- merge(si, metadata, by.x = "sample_id", by.y = ".edna_sample_id",
+                all.x = TRUE, sort = FALSE)
   }
 
   # ── Validate ──────────────────────────────────────────────────────────────
@@ -160,16 +163,15 @@ eDNA_dmm_structure <- function(
 
   # ── Titles ────────────────────────────────────────────────────────────────
   title_str    <- title    %||% sprintf("Posterior Community Assignments  (K = %d)", K)
-  subtitle_str <- subtitle %||% sprintf(
-    "%d samples  |  bar height = posterior membership probability", nrow(si))
+  subtitle_str <- subtitle %||% ""
 
   # ── Core single-panel builder ─────────────────────────────────────────────
-  # Uses sample_id as discrete x within each subset — gapless bars guaranteed.
+  # Uses sample_id as discrete x within each subset: gapless bars guaranteed.
   build_panel <- function(dat, row_label = NULL, show_legend = FALSE,
                           show_ylab = TRUE) {
     if (!is.null(sort_var)) dat <- dat[order(dat[[sort_var]]), ]
 
-    # Ordered factor from this subset only — key to gapless bars
+    # Ordered factor from this subset only: key to gapless bars
     dat$x_label <- factor(dat$sample_id, levels = unique(dat$sample_id))
 
     # Vline position within facet_var panels
@@ -184,7 +186,7 @@ eDNA_dmm_structure <- function(
             # The position must be LOCAL to the panel. facet_grid(scales =
             # "free_x") drops unused levels and re-indexes each panel from 1, so
             # a global level index would land outside the panel and stretch its
-            # x range — which silently destroys the proportional panel widths
+            # x range: which silently destroys the proportional panel widths
             # that space = "free_x" is supposed to give.
             cape_x = match(
               .data$x_label[which.min(abs(.data[[vline_var]] - vline_value))],
@@ -278,7 +280,7 @@ eDNA_dmm_structure <- function(
     sort(unique(si[[facet_row_var]]))
 
   # In "ylab" mode each panel's y-axis title IS its row label. In "title" mode
-  # the row label moves to the panel title, so no panel carries an axis title —
+  # the row label moves to the panel title, so no panel carries an axis title: 
   # a shared one is drawn for the whole stack below.
   panels <- Filter(Negate(is.null), lapply(row_levels, function(lv) {
     dat <- si[si[[facet_row_var]] == lv, ]
@@ -289,7 +291,7 @@ eDNA_dmm_structure <- function(
 
   # An empty title AND subtitle means the caller is embedding this plot as a
   # panel of a larger figure, where the heading lives in the figure legend. In
-  # that case the title row is dropped entirely rather than drawn empty — an
+  # that case the title row is dropped entirely rather than drawn empty: an
   # empty row still consumes height and shows up as a gap above the panel.
   has_heading <- nzchar(title_str) || nzchar(subtitle_str)
 

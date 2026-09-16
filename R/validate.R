@@ -266,51 +266,51 @@ validate_covariates <- function(covariates, counts, scale_covariates,
 }
 
 # =============================================================================
-# Replicate structure (station_id)
+# Replicate structure (replication)
 # =============================================================================
 
-#' Validate a station_id vector against a replicate-level count matrix
+#' Validate a replication vector against a replicate-level count matrix
 #'
 #' Returns the information `eDNA_dmm()` needs to build ragged replicate data,
 #' plus a `fallback` flag. `fallback = TRUE` means no station has more than one
 #' replicate, in which case the replicate model's two dispersion parameters
-#' (`alpha`, `phi`) are not separately identified — and the caller should simply
+#' (`alpha`, `phi`) are not separately identified; and the caller should simply
 #' use the standard model, which is the correct model for unreplicated data.
 #'
 #' @return A list with `index` (integer station index per row), `levels`,
 #'   `n_stations`, `reps` (replicates per station) and `fallback`.
 #' @keywords internal
-validate_station_id <- function(station_id, counts, call = rlang::caller_env()) {
+validate_replication <- function(replication, counts, call = rlang::caller_env()) {
   R <- nrow(counts)
 
-  if (is.matrix(station_id) || is.data.frame(station_id)) {
-    if (ncol(as.data.frame(station_id)) != 1) {
+  if (is.matrix(replication) || is.data.frame(replication)) {
+    if (ncol(as.data.frame(replication)) != 1) {
       rlang::abort(
         c(
-          "`station_id` must be a vector, not a multi-column object.",
+          "`replication` must be a vector, not a multi-column object.",
           i = "Supply one station label per row of `counts`, e.g. `metadata$station`."
         ),
         call = call
       )
     }
-    station_id <- as.data.frame(station_id)[[1]]
+    replication <- as.data.frame(replication)[[1]]
   }
 
-  if (!is.atomic(station_id)) {
+  if (!is.atomic(replication)) {
     rlang::abort(
       c(
-        "`station_id` must be an atomic vector (character, factor, or numeric).",
+        "`replication` must be an atomic vector (character, factor, or numeric).",
         i = paste0("You supplied an object of class: ",
-                   paste(class(station_id), collapse = ", "))
+                   paste(class(replication), collapse = ", "))
       ),
       call = call
     )
   }
 
-  if (length(station_id) != R) {
+  if (length(replication) != R) {
     rlang::abort(
       c(
-        paste0("`station_id` has length ", length(station_id),
+        paste0("`replication` has length ", length(replication),
                " but `counts` has ", R, " rows."),
         i = "There must be exactly one station label per row of `counts`.",
         i = "With replicates, each row of `counts` is one replicate, and rows from the same station repeat that station's label."
@@ -319,18 +319,18 @@ validate_station_id <- function(station_id, counts, call = rlang::caller_env()) 
     )
   }
 
-  if (anyNA(station_id)) {
+  if (anyNA(replication)) {
     rlang::abort(
       c(
-        paste0("`station_id` contains ", sum(is.na(station_id)), " NA value(s)."),
+        paste0("`replication` contains ", sum(is.na(replication)), " NA value(s)."),
         i = "Every replicate must be assigned to a station.",
-        i = "Drop those rows from `counts` and `station_id` together, or label them."
+        i = "Drop those rows from `counts` and `replication` together, or label them."
       ),
       call = call
     )
   }
 
-  station_chr <- as.character(station_id)
+  station_chr <- as.character(replication)
   # Levels in order of first appearance, so station ordering is stable and
   # predictable (row 1's station is station 1).
   levels_ <- unique(station_chr)
@@ -340,9 +340,9 @@ validate_station_id <- function(station_id, counts, call = rlang::caller_env()) 
   if (n_stations < 2) {
     rlang::abort(
       c(
-        paste0("`station_id` identifies only ", n_stations, " station(s)."),
+        paste0("`replication` identifies only ", n_stations, " station(s)."),
         i = "The mixture model needs at least 2 stations (ideally many more).",
-        i = "Check that `station_id` labels stations, not replicates: all replicates of one station share a label."
+        i = "Check that `replication` labels stations, not replicates: all replicates of one station share a label."
       ),
       call = call
     )
@@ -353,7 +353,7 @@ validate_station_id <- function(station_id, counts, call = rlang::caller_env()) 
 
   # No replication anywhere: alpha and phi are not separately identified, and
   # the replicate model would buy the user nothing. Signal a fallback rather
-  # than warning or erroring — unreplicated data stays fully supported.
+  # than warning or erroring: unreplicated data stays fully supported.
   if (max_reps == 1) {
     return(list(
       index      = index,
@@ -389,7 +389,7 @@ validate_station_id <- function(station_id, counts, call = rlang::caller_env()) 
 #' Accepts covariates supplied either per station (already `n_stations` rows) or
 #' per replicate (one row per row of `counts`). In the latter case the rows are
 #' collapsed to one per station, erroring if any covariate varies within a
-#' station — the model has no replicate-level covariate term, so such a covariate
+#' station, the model has no replicate-level covariate term, so such a covariate
 #' could not be used.
 #'
 #' @keywords internal
@@ -407,7 +407,7 @@ collapse_station_covariates <- function(covariates, station, call = rlang::calle
         paste0("`covariates` has ", n_rows, " rows, which matches neither the number of stations (",
                station$n_stations, ") nor the number of replicate rows (",
                length(station$index), ")."),
-        i = "Supply covariates either one row per station (in order of first appearance in `station_id`), or one row per row of `counts`.",
+        i = "Supply covariates either one row per station (in order of first appearance in `replication`), or one row per row of `counts`.",
         i = "Covariates are station-level: the model has no replicate-level covariate term."
       ),
       call = call
@@ -599,4 +599,85 @@ make_taxa_colors <- function(taxa, n_hues = 7, include_other = TRUE) {
   }))
 
   c(stats::setNames(cols[seq_len(n)], taxa_sorted), other)
+}
+
+
+# =============================================================================
+# resolve_metadata_ids(): work out which sample each metadata row describes
+# =============================================================================
+
+#' Match rows of `metadata` to rows of `counts`
+#'
+#' @description
+#' The plotting functions need to know which sample each row of `metadata`
+#' refers to. Rather than insisting on a column with one particular name, this
+#' tries the three things a user could reasonably have done, in order:
+#'
+#' 1. a column named `sample_id_col`;
+#' 2. row names on `metadata` that match the sample IDs;
+#' 3. the same number of rows as `counts`, matched in order.
+#'
+#' Only if all three fail does it raise an error, and the error says what was
+#' looked for and what to do about it.
+#'
+#' @param metadata The user's metadata data frame.
+#' @param sample_id_col Name of the column to look for first.
+#' @param sample_ids Character vector of sample IDs taken from `counts`.
+#' @param call Calling environment, for the error message.
+#' @return A character vector of sample IDs, one per row of `metadata`.
+#' @keywords internal
+#' @noRd
+resolve_metadata_ids <- function(metadata, sample_id_col, sample_ids,
+                                 call = rlang::caller_env()) {
+
+  # 1. The named column, the documented happy path.
+  if (sample_id_col %in% names(metadata)) {
+    return(as.character(metadata[[sample_id_col]]))
+  }
+
+  # 2. Row names. A data frame carried around by subsetting a matrix, or built
+  #    with row.names =, keeps its IDs here rather than in a column.
+  rn <- rownames(metadata)
+  has_real_rownames <- !is.null(rn) &&
+    !identical(rn, as.character(seq_len(nrow(metadata))))
+  if (has_real_rownames && any(rn %in% sample_ids)) {
+    return(as.character(rn))
+  }
+
+  # 3. Same number of rows as counts: assume they are in the same order. This
+  #    is the documented contract for `covariates`, so it is reasonable here
+  #    too - but say so, because a silent mis-alignment would be much worse
+  #    than a noisy one.
+  if (nrow(metadata) == length(sample_ids)) {
+    rlang::inform(c(
+      paste0("No '", sample_id_col, "' column in `metadata`; matching rows to ",
+             "samples by position."),
+      i = paste0("`metadata` has the same number of rows as `counts` (",
+                 length(sample_ids), "), so row i is taken to describe sample i."),
+      i = paste0("Add a '", sample_id_col, "' column, or set `sample_id_col`, ",
+                 "to match on IDs instead.")
+    ), .frequency = "once",
+    .frequency_id = paste0("edna_metadata_positional_", sample_id_col))
+    return(as.character(sample_ids))
+  }
+
+  # 4. Nothing worked. Say what was tried and how to fix it.
+  rlang::abort(c(
+    "Can't tell which sample each row of `metadata` describes.",
+    x = paste0("No column named '", sample_id_col, "', no row names matching ",
+               "the sample IDs, and `metadata` has ", nrow(metadata),
+               " row(s) while `counts` has ", length(sample_ids), "."),
+    i = paste0("`counts` is expected to be samples (rows) x taxa (columns), ",
+               "with `rownames(counts)` giving the sample IDs."),
+    i = paste0("`metadata` should either carry those IDs in a column named '",
+               sample_id_col, "', or have one row per sample in the same order ",
+               "as `counts`."),
+    i = if (length(names(metadata))) {
+      paste0("Columns found in `metadata`: ",
+             paste(utils::head(names(metadata), 10), collapse = ", "),
+             if (length(names(metadata)) > 10) ", ..." else "")
+    } else "`metadata` has no columns.",
+    i = paste0("If your sample column has a different name, pass it: ",
+               "sample_id_col = \"your_column\".")
+  ), call = call)
 }

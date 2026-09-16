@@ -66,7 +66,7 @@ panel with the posterior mean, 90\% CI, and P(direction) value.}
 
 \item{title}{A string: the plot title. Default is auto-generated.}
 
-\item{subtitle}{A string: the plot subtitle. Default is auto-generated.}
+\item{subtitle}{Plot subtitle. Default \code{NULL}, meaning no subtitle.}
 }
 \value{
 A list with two elements:
@@ -104,9 +104,9 @@ in detail without overlap.
 
 For each covariate:
 \itemize{
-\item \strong{Grey}: the prior distribution — Normal(0, \code{beta_prior_sd}). This is
+\item \strong{Grey}: the prior distribution, Normal(0, \code{beta_prior_sd}). This is
 what the model assumed before seeing the data.
-\item \strong{Colored}: the posterior distribution — what the model learned from the
+\item \strong{Colored}: the posterior distribution, what the model learned from the
 data. One color per community.
 }
 

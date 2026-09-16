@@ -2,12 +2,12 @@
 # Simulation functions for eDNA metabarcoding community structure
 # =============================================================================
 # These functions implement a mechanistic simulation pipeline:
-#   1. generate_community_compositions() — K community frequency vectors
-#   2. generate_contributors()           — organisms shedding eDNA per sample
-#   3. generate_eDNA()                   — eDNA shedding, decay, sub-sampling
-#   4. simulate_metabarcoding()          — amplification bias + read counts
-#   5. generate_sample_covariates()      — environmental metadata
-#   6. simulate_eDNA_survey()            — full pipeline in one call
+#   1. generate_community_compositions(): K community frequency vectors
+#   2. generate_contributors(): organisms shedding eDNA per sample
+#   3. generate_eDNA(): eDNA shedding, decay, sub-sampling
+#   4. simulate_metabarcoding(): amplification bias + read counts
+#   5. generate_sample_covariates(): environmental metadata
+#   6. simulate_eDNA_survey(): full pipeline in one call
 # =============================================================================
 
 
@@ -650,12 +650,24 @@ generate_sample_covariates <- function(
 #' @param seed Integer random seed. Default `42`.
 #' @param ... Additional arguments passed to [generate_community_compositions()].
 #'
-#' @return A list with:
+#' @return A list. The first three elements mirror [get_example_data()] exactly,
+#'   so code written against one works unchanged against the other:
 #' \describe{
-#'   \item{`counts`}{Integer matrix `N × S` ready for [eDNA_dmm()].}
-#'   \item{`covariates`}{Data frame with `sample_id`, `TrueCommunity`, and
-#'     covariate columns, ready for [eDNA_dmm()].}
-#'   \item{`community_compositions`}{The true `K × S` composition matrix.}
+#'   \item{`counts`}{Integer matrix `N x S`, samples in rows, ready for
+#'     [eDNA_dmm()].}
+#'   \item{`covariates`}{Data frame of **numeric covariate columns only**, one
+#'     row per sample, ready to pass straight to [eDNA_dmm()]. Identifier and
+#'     ground-truth columns are deliberately excluded: [eDNA_dmm()] fits every
+#'     column it is given, so a `sample_id` would be fitted as though it were
+#'     an environmental gradient.}
+#'   \item{`metadata`}{Data frame with `sample_id`, `TrueCommunity` and the
+#'     covariate columns - the labelling columns, for the `metadata` argument
+#'     of [plot_true_compositions()] and [eDNA_dmm_structure()].}
+#' }
+#'   The remaining elements are the simulation's ground truth, for checking
+#'   parameter recovery:
+#' \describe{
+#'   \item{`community_compositions`}{The true `K x S` composition matrix.}
 #'   \item{`metab_df`}{Raw metabarcoding data frame.}
 #'   \item{`sample_metadata`}{Full sample metadata data frame.}
 #'   \item{`contributors`}{Output of [generate_contributors()].}
@@ -774,14 +786,38 @@ simulate_eDNA_survey <- function(
   rownames(X) <- paste0("STN_", sprintf("%03d", sample_counts$SampleID))
   colnames(X) <- paste0("Sp_", colnames(X))
 
-  # 7. Covariates data frame aligned to X
-  covariates_df <- sample_metadata |>
+  # 7. Covariates and metadata aligned to X
+  #
+  # These deliberately mirror what get_example_data() returns, so that code
+  # written against one works unchanged against the other:
+  #
+  #   covariates - numeric columns ONLY, safe to hand straight to eDNA_dmm()
+  #   metadata   - the labelling columns, for the plotting functions
+  #
+  # Anything not a model covariate (sample_id, TrueCommunity) must stay out of
+  # `covariates`: eDNA_dmm() fits every column it is given, so an ID column
+  # would be fitted as though it were an environmental gradient.
+  meta_df <- sample_metadata |>
     dplyr::arrange(.data$SampleID) |>
     dplyr::mutate(sample_id = paste0("STN_", sprintf("%03d", .data$SampleID)))
+
+  id_cols <- c("SampleID", "sample_id", "TrueCommunity")
+  cov_names <- setdiff(names(meta_df), id_cols)
+  cov_names <- cov_names[vapply(meta_df[cov_names], is.numeric, logical(1))]
+
+  covariates_df <- as.data.frame(meta_df[, cov_names, drop = FALSE])
+  rownames(covariates_df) <- meta_df$sample_id
+
+  metadata_df <- as.data.frame(
+    meta_df[, c("sample_id", intersect("TrueCommunity", names(meta_df)), cov_names),
+            drop = FALSE]
+  )
+  rownames(metadata_df) <- NULL
 
   list(
     counts                = X,
     covariates            = covariates_df,
+    metadata              = metadata_df,
     community_compositions = community_mat,
     metab_df              = metab_df,
     sample_metadata       = sample_metadata,

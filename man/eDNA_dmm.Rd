@@ -8,7 +8,7 @@ eDNA_dmm(
   counts,
   covariates = NULL,
   K = 2,
-  station_id = NULL,
+  replication = NULL,
   scale_covariates = TRUE,
   chains = 1,
   iter = 4000,
@@ -38,10 +38,10 @@ intercept-only model with no covariate effects on community membership.}
 If you are unsure, start with \code{K = 2} and increase. The function
 \code{\link[=eDNA_loo]{eDNA_loo()}} can help compare models across values of K.}
 
-\item{station_id}{Optional vector of station labels, one per \strong{row} of
+\item{replication}{Optional vector of station labels, one per \strong{row} of
 \code{counts}, identifying which rows are replicates of the same station. Rows
 sharing a label are treated as replicates. Leave as \code{NULL} (the default)
-when each row of \code{counts} is an independent sample — this is the standard,
+when each row of \code{counts} is an independent sample; this is the standard,
 fully identified model and the right choice for unreplicated data. See the
 \strong{Replicated samples} section.}
 
@@ -83,9 +83,9 @@ Set a fixed seed for reproducibility across runs.}
 \item{conc}{A positive number: the Dirichlet concentration parameter for
 the prior on community compositions (\code{pi}). Default is \code{0.5}.
 \itemize{
-\item \code{conc < 1} (e.g., 0.5): sparse compositions — each community is
+\item \code{conc < 1} (e.g., 0.5): sparse compositions, in which each community is
 dominated by a few taxa. Usually appropriate for eDNA data.
-\item \code{conc = 1}: flat (symmetric Dirichlet) prior — all compositions
+\item \code{conc = 1}: flat (symmetric Dirichlet) prior, under which all compositions
 equally likely. Uninformative.
 \item \code{conc > 1}: concentrates compositions toward uniform. Use only
 if you expect all taxa to be equally abundant in each community.
@@ -102,13 +102,13 @@ prior on \code{alpha}. Default is \code{2}. Prior mean = \code{alpha_shape / alp
 
 \item{phi_shape}{A positive number: shape of the Gamma prior on the
 replicate-level dispersion \code{phi}. Default is \code{2}. Only used when
-\code{station_id} is supplied.}
+\code{replication} is supplied.}
 
 \item{phi_rate}{A positive number: rate of the Gamma prior on \code{phi}.
-Default is \code{0.02}, giving a diffuse prior with mean 100 — deliberately much
+Default is \code{0.02}, giving a diffuse prior with mean 100, deliberately much
 larger than the prior mean for \code{alpha}, because replicates of one station
 are usually far more similar to each other than different stations are.
-Only used when \code{station_id} is supplied.}
+Only used when \code{replication} is supplied.}
 
 \item{verbose}{Logical. If \code{TRUE} (the default), print Stan compilation and
 sampling progress. Set to \code{FALSE} for silent fitting (useful in loops
@@ -133,7 +133,7 @@ Inference is performed with Stan via \code{\link[rstan:stan]{rstan::stan()}}. Th
 
 \code{counts} should be a \strong{sample × taxon} matrix of non-negative integer read
 counts. Rows are samples (stations, replicates, etc.) and columns are taxa
-(or ASVs — the model does not require taxonomic annotation). Row names
+(or ASVs, the model does not require taxonomic annotation). Row names
 are used as sample identifiers in plots; column names are used as taxon
 labels.
 
@@ -162,8 +162,8 @@ Typical eDNA data have \code{alpha} in the range 1–5.
 
 \section{Replicated samples}{
 
-If a station was sequenced more than once (PCR or bottle replicates), pass
-each replicate as its own row of \code{counts} and use \code{station_id} to say which
+If a station was sequenced more than once (PCR or sampling replicates), pass
+each replicate as its own row of \code{counts} and use \code{replication} to say which
 rows belong together. This switches to a hierarchical model that estimates
 each station's own composition:
 \itemize{
@@ -177,27 +177,27 @@ tightly replicates cluster around their own station). The posterior mean
 station compositions are returned as \code{theta_mean}.
 
 \strong{Why not just sum the replicates?} Summing would be lossless if replicates
-were plain multinomial draws from the station's composition — their sum is a
+were plain multinomial draws from the station's composition, their sum is a
 sufficient statistic, and the summed model is exactly what you get. Replicates
 are informative precisely because they are \emph{overdispersed} relative to
 multinomial (PCR jackpotting, uneven template). Replicate concordance versus
 scatter is the signal, and summing discards it.
 
 Replication may be ragged: stations can have different numbers of replicates,
-and stations with a single replicate are fully supported — their \code{theta_i} is
+and stations with a single replicate are fully supported, their \code{theta_i} is
 informed by that replicate plus shrinkage toward \code{alpha * pi_k}, using a \code{phi}
 learned from the replicated stations. If \emph{no} station has more than one
 replicate, \code{alpha} and \code{phi} are not separately identified, so \code{eDNA_dmm()}
 simply uses the standard model instead and says so.
 
 \code{covariates} remain \strong{station-level}: supply either one row per station (in
-order of first appearance in \code{station_id}) or one row per row of \code{counts}, in
+order of first appearance in \code{replication}) or one row per row of \code{counts}, in
 which case they are collapsed automatically. A covariate that varies between
 replicates of the same station is an error, since the model has no
 replicate-level covariate term.
 
 Note that \code{\link[=eDNA_loo]{eDNA_loo()}} deliberately stays on the standard summed model for
-K selection — see its documentation.
+K selection. See its documentation.
 }
 
 \section{Single-chain recommendation}{
@@ -229,12 +229,12 @@ regression coefficient (mean, 90\% CI, P(direction), ESS).}
 \item{\code{replicate}}{Logical: whether the replicate-aware model was used.}
 \item{\code{theta_mean}}{Matrix \verb{N × S} of posterior mean \strong{station}
 compositions, or \code{NULL} when the standard model was used. Only available
-from the replicate model — the summed model has no station-level
+from the replicate model, the summed model has no station-level
 composition parameter.}
 \item{\code{phi_mean}}{Scalar: posterior mean replicate-level dispersion, or
 \code{NULL} when the standard model was used.}
 \item{\code{K}}{Number of communities fitted.}
-\item{\code{N}}{Number of samples — stations, when the replicate model is used.}
+\item{\code{N}}{Number of samples, stations, when the replicate model is used.}
 \item{\code{R}}{Number of replicate rows (equals \code{N} for the standard model).}
 \item{\code{S}}{Number of taxa.}
 \item{\code{taxa_names}}{Character vector of taxon names (column names of \code{counts}).}
@@ -270,11 +270,11 @@ fit_null <- eDNA_dmm(
   K          = 2
 )
 
-# Replicated data: each row of `counts` is one replicate, and `station_id`
+# Replicated data: each row of `counts` is one replicate, and `replication`
 # says which rows belong to the same station. Covariates stay station-level.
 fit_rep <- eDNA_dmm(
   counts     = replicate_counts,
-  station_id = replicate_meta$station,
+  replication = replicate_meta$station,
   covariates = station_covariates,
   K          = 2
 )

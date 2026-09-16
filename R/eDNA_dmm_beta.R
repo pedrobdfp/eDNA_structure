@@ -1,5 +1,5 @@
 # =============================================================================
-# eDNA_dmm_beta() — Prior vs posterior plots for softmax beta coefficients
+# eDNA_dmm_beta(): Prior vs posterior plots for softmax beta coefficients
 # =============================================================================
 
 #' Plot covariate effects: prior vs posterior distributions of beta coefficients
@@ -25,9 +25,9 @@
 #'
 #' @section Reading the plot:
 #' For each covariate:
-#' - **Grey**: the prior distribution — Normal(0, `beta_prior_sd`). This is
+#' - **Grey**: the prior distribution, Normal(0, `beta_prior_sd`). This is
 #'   what the model assumed before seeing the data.
-#' - **Colored**: the posterior distribution — what the model learned from the
+#' - **Colored**: the posterior distribution, what the model learned from the
 #'   data. One color per community.
 #'
 #' Interpret:
@@ -78,7 +78,7 @@
 #'   panel with the posterior mean, 90% CI, and P(direction) value.
 #' @param base_size A positive number: the base font size. Default is `13`.
 #' @param title A string: the plot title. Default is auto-generated.
-#' @param subtitle A string: the plot subtitle. Default is auto-generated.
+#' @param subtitle Plot subtitle. Default `NULL`, meaning no subtitle.
 #'
 #' @return A list with two elements:
 #' \describe{
@@ -262,10 +262,7 @@ eDNA_dmm_beta <- function(
   )
 
   title_str    <- title    %||% sprintf("Covariate effects on community membership  (K = %d)", K)
-  subtitle_str <- subtitle %||% sprintf(
-    "Posterior (colored) vs prior (grey, Normal(0, %.1f))  |  Community %d = reference",
-    beta_prior_sd, K
-  )
+  subtitle_str <- subtitle
 
   p <- ggplot2::ggplot(
     plot_df,

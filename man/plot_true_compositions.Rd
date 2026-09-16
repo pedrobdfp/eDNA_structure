@@ -72,7 +72,7 @@ from \code{counts} are dropped with a warning. Default \code{NULL}, meaning rank
 
 \item{title}{Plot title. Default auto-generated.}
 
-\item{subtitle}{Plot subtitle. Default auto-generated.}
+\item{subtitle}{Plot subtitle. Default \code{NULL}, meaning no subtitle.}
 
 \item{show_legend}{Logical. Show the taxon legend. Default \code{FALSE} - a
 full taxon legend is usually too large to be useful on this plot.}
@@ -123,7 +123,7 @@ meaning \code{base_size}.}
 stack. Default \code{0.03}.}
 
 \item{row_label_fn}{Function applied to each \code{facet_row_var} level to
-produce its display label — e.g. \code{function(x) paste0(x, " m")} for a
+produce its display label, e.g. \code{function(x) paste0(x, " m")} for a
 depth column, or \code{function(x) paste0("Year: ", x)} for year. This is
 what makes the label text generalize across datasets: it's tied to
 whatever \code{facet_row_var} means for your data.
@@ -151,7 +151,7 @@ an inner set would collide with them.}
 A ggplot2 object (no \code{facet_row_var}) or a cowplot grid object.
 }
 \description{
-Produces a stacked bar plot of \strong{observed species frequencies} — one bar
+Produces a stacked bar plot of \strong{observed species frequencies}: one bar
 per sample, colored by species. This is a pre-fitting diagnostic that shows
 the raw community signal in your data before any model is applied. It uses
 the same visual format as \code{\link[=eDNA_dmm_structure]{eDNA_dmm_structure()}} so the two plots can be
@@ -161,7 +161,7 @@ shows what community they were assigned to.
 When \code{facet_row_var} is supplied, one sub-plot is built per row-level and
 they are assembled vertically with cowplot. This mirrors the original
 make_bar_figure() approach that gives each depth stratum its own
-proportional-width panels — the only architecture that keeps panel widths
+proportional-width panels, the only architecture that keeps panel widths
 proportional to sample count via space = "free_x".
 }
 \seealso{

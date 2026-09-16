@@ -72,8 +72,7 @@ Default is \code{13}.}
 
 \item{title}{A string: the plot title. Default is auto-generated.}
 
-\item{subtitle}{A string: the plot subtitle (shown below the title, includes
-stress value by default). Default is auto-generated.}
+\item{subtitle}{Plot subtitle. Default \code{NULL}, meaning no subtitle.}
 
 \item{legend_position}{A string: legend placement. One of \code{"right"}
 (default), \code{"bottom"}, \code{"left"}, \code{"top"}, or \code{"none"}.}

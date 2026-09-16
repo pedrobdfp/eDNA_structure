@@ -65,6 +65,6 @@ NULL
 .onLoad <- function(libname, pkgname) {
   rstan::rstan_options(auto_write = TRUE)
   # Stan model is compiled lazily on first use of eDNA_dmm(), not here.
-  # See R/stanmodels.R (.get_dmm_stanmodel()) — this avoids any dependency
+  # See R/stanmodels.R (.get_dmm_stanmodel()): this avoids any dependency
   # on precompiled Rcpp Modules / RCPP_MODULE DLL export behavior.
 }

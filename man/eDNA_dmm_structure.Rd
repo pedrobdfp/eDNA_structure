@@ -65,7 +65,7 @@ colors. Default \code{NULL} (automatic HCL palette).}
 
 \item{title}{Plot title. Default auto-generated.}
 
-\item{subtitle}{Plot subtitle. Default auto-generated.}
+\item{subtitle}{Plot subtitle. Default \code{NULL}, meaning no subtitle.}
 
 \item{show_legend}{Logical. Show legend. Default \code{TRUE}.}
 
@@ -114,7 +114,7 @@ stack. Default \code{0.03}.}
 meaning ggplot2's own scaling from \code{base_size}.}
 
 \item{row_label_fn}{Function applied to each \code{facet_row_var} level to
-produce its display label — e.g. \code{function(x) paste0(x, " m")} for a
+produce its display label, e.g. \code{function(x) paste0(x, " m")} for a
 depth column, or \code{function(x) paste0("Year: ", x)} for year.
 Default \code{as.character} (just prints the raw value).}
 
@@ -149,7 +149,7 @@ composition), the other shows what community they were assigned to
 (posterior assignment probabilities).
 
 When \code{facet_row_var} is supplied, one sub-plot is built per row-level and
-assembled vertically with cowplot — the only architecture that keeps panel
+assembled vertically with cowplot, the only architecture that keeps panel
 widths proportional to sample count via space = "free_x".
 }
 \seealso{

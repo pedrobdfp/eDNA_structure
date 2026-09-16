@@ -7,25 +7,25 @@
 get_example_replicates()
 }
 \value{
-A named list with elements \code{counts}, \code{station_id}, \code{covariates}
+A named list with elements \code{counts}, \code{replication}, \code{covariates}
 and \code{metadata}.
 }
 \description{
-The same survey as \code{\link[=get_example_data]{get_example_data()}}, but with three bottle replicates
+The same survey as \code{\link[=get_example_data]{get_example_data()}}, but with three replicates
 per site instead of one pooled sample. Use it to see how replicated data
 should be shaped for the hierarchical model.
 
 The only structural difference is that \code{counts} has one row per \emph{replicate}
-rather than per site, and a \code{station_id} vector says which rows belong
+rather than per site, and a \code{replication} vector says which rows belong
 together. Do not sum replicates before fitting - see \code{\link[=eDNA_dmm]{eDNA_dmm()}}.
 }
 \section{Data format}{
 
 \describe{
 \item{\code{counts}}{Integer matrix, 60 replicates x 33 taxa. Row names are
-\code{STN_001_B1}, \code{STN_001_B2}, ... - three bottles per site.}
-\item{\code{station_id}}{Character vector of length 60 giving the site each
-row belongs to. Pass this as \code{station_id} to \code{\link[=eDNA_dmm]{eDNA_dmm()}}.}
+\code{STN_001_B1}, \code{STN_001_B2}, ... - three replicates per site.}
+\item{\code{replication}}{Character vector of length 60 giving the site each
+row belongs to. Pass this as \code{replication} to \code{\link[=eDNA_dmm]{eDNA_dmm()}}.}
 \item{\code{covariates}}{Data frame, 20 rows x 2 numeric columns. Covariates
 are \strong{station-level}: one row per site, not per replicate.}
 \item{\code{metadata}}{Data frame, 20 rows, station-level labelling columns.}
@@ -37,13 +37,13 @@ r <- get_example_replicates()
 
 dim(r$counts)            # 60 replicates x 33 taxa
 r$counts[1:4, 1:5]       # STN_001_B1 .. STN_002_B1
-head(r$station_id, 6)    # which site each row came from
+head(r$replication, 6)    # which site each row came from
 nrow(r$covariates)       # 20 - one row per site, not per replicate
 
 \dontrun{
 fit <- eDNA_dmm(
   counts     = r$counts,
-  station_id = r$station_id,
+  replication = r$replication,
   covariates = r$covariates,
   K          = 4
 )

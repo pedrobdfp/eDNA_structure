@@ -1,5 +1,5 @@
 # =============================================================================
-# eDNA_dmm_nmds() — NMDS ordination colored by community assignment
+# eDNA_dmm_nmds(): NMDS ordination colored by community assignment
 # =============================================================================
 
 #' NMDS ordination of community composition colored by community assignment
@@ -73,8 +73,7 @@
 #' @param base_size A positive number: the base font size for the plot theme.
 #'   Default is `13`.
 #' @param title A string: the plot title. Default is auto-generated.
-#' @param subtitle A string: the plot subtitle (shown below the title, includes
-#'   stress value by default). Default is auto-generated.
+#' @param subtitle Plot subtitle. Default `NULL`, meaning no subtitle.
 #' @param legend_position A string: legend placement. One of `"right"`
 #'   (default), `"bottom"`, `"left"`, `"top"`, or `"none"`.
 #'
@@ -216,11 +215,7 @@ eDNA_dmm_nmds <- function(
 
   # ── Build plot ────────────────────────────────────────────────────────────────
   title_str    <- title    %||% sprintf("NMDS  (K = %d communities)", K)
-  subtitle_str <- subtitle %||% sprintf(
-    "Bray-Curtis %s | Stress = %.3f (%s) | N = %d samples",
-    if (use_edna_index) "(eDNA index)" else "",
-    stress, stress_label, nrow(plot_df)
-  )
+  subtitle_str <- subtitle
 
   p <- ggplot2::ggplot(
     plot_df,

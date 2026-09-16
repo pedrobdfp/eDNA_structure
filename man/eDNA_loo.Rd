@@ -63,13 +63,13 @@ Leave-One-Out cross-validation (LOO-CV) via the \code{loo} package. Returns
 both a comparison table and an elbow plot of LOO-ELPD vs K.
 
 LOO-ELPD (expected log predictive density) measures how well each model
-predicts held-out observations. Higher values are better. The "elbow" —
-the point where additional communities yield diminishing LOO-ELPD gains —
+predicts held-out observations. Higher values are better. The "elbow",
+the point where additional communities yield diminishing LOO-ELPD gains,
 is a useful heuristic for choosing K.
 }
 \section{Replicated data}{
 
-\code{eDNA_loo()} always uses the standard (summed) model — it has no \code{station_id}
+\code{eDNA_loo()} always uses the standard (summed) model; it has no \code{replication}
 argument. This is deliberate. The replicate-aware model in \code{\link[=eDNA_dmm]{eDNA_dmm()}} gives
 each station its own composition parameter \code{theta_i}, so holding a station out
 leaves that station's own parameter unidentified and station-level LOO is not
@@ -77,9 +77,9 @@ well defined. It is also considerably slower, which matters when sweeping many
 values of K.
 
 The recommended workflow with replicated data is therefore: select K here on
-the summed model, then refit at the chosen K with \code{station_id} supplied to
+the summed model, then refit at the chosen K with \code{replication} supplied to
 \code{\link[=eDNA_dmm]{eDNA_dmm()}} for the final parameter estimates. If you have replicates, sum
-them per station for this step (e.g. \code{rowsum(rep_counts, station_id)}).
+them per station for this step (e.g. \code{rowsum(rep_counts, replication)}).
 }
 
 \seealso{

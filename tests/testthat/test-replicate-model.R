@@ -1,5 +1,5 @@
 # =============================================================================
-# Replicate-aware model: station_id handling
+# Replicate-aware model: replication handling
 # =============================================================================
 # The fast tests here cover validation and reshaping only — no Stan fitting, so
 # they run in the normal test suite. The fitting tests at the bottom are opt-in
@@ -12,11 +12,11 @@ make_counts <- function(n_rows, n_taxa = 5, seed = 1) {
   m
 }
 
-# ── validate_station_id() ────────────────────────────────────────────────────
+# ── validate_replication() ────────────────────────────────────────────────────
 
-test_that("validate_station_id() maps rows to stations in first-appearance order", {
+test_that("validate_replication() maps rows to stations in first-appearance order", {
   counts <- make_counts(6)
-  st <- validate_station_id(c("B", "B", "A", "A", "C", "C"), counts)
+  st <- validate_replication(c("B", "B", "A", "A", "C", "C"), counts)
 
   expect_equal(st$levels, c("B", "A", "C"))
   expect_equal(st$index, c(1L, 1L, 2L, 2L, 3L, 3L))
@@ -25,40 +25,40 @@ test_that("validate_station_id() maps rows to stations in first-appearance order
   expect_equal(as.integer(st$reps), c(2L, 2L, 2L))
 })
 
-test_that("validate_station_id() handles ragged replication", {
+test_that("validate_replication() handles ragged replication", {
   counts <- make_counts(6)
-  st <- validate_station_id(c("A", "A", "A", "B", "C", "C"), counts)
+  st <- validate_replication(c("A", "A", "A", "B", "C", "C"), counts)
 
   expect_equal(st$n_stations, 3L)
   expect_equal(as.integer(st$reps), c(3L, 1L, 2L))
   expect_false(st$fallback)
 })
 
-test_that("validate_station_id() accepts factors and numeric labels", {
+test_that("validate_replication() accepts factors and numeric labels", {
   counts <- make_counts(4)
-  st_fac <- validate_station_id(factor(c("a", "a", "b", "b")), counts)
-  st_num <- validate_station_id(c(10, 10, 20, 20), counts)
+  st_fac <- validate_replication(factor(c("a", "a", "b", "b")), counts)
+  st_num <- validate_replication(c(10, 10, 20, 20), counts)
 
   expect_equal(st_fac$index, c(1L, 1L, 2L, 2L))
   expect_equal(st_num$index, c(1L, 1L, 2L, 2L))
   expect_equal(st_num$levels, c("10", "20"))
 })
 
-test_that("validate_station_id() rejects malformed input", {
+test_that("validate_replication() rejects malformed input", {
   counts <- make_counts(6)
 
-  expect_error(validate_station_id(c("A", "A", "B"), counts), "length 3")
-  expect_error(validate_station_id(c("A", "A", NA, "B", "B", "C"), counts), "NA value")
-  expect_error(validate_station_id(rep("A", 6), counts), "only 1 station")
+  expect_error(validate_replication(c("A", "A", "B"), counts), "length 3")
+  expect_error(validate_replication(c("A", "A", NA, "B", "B", "C"), counts), "NA value")
+  expect_error(validate_replication(rep("A", 6), counts), "only 1 station")
   expect_error(
-    validate_station_id(data.frame(a = 1:6, b = 1:6), counts),
+    validate_replication(data.frame(a = 1:6, b = 1:6), counts),
     "must be a vector"
   )
 })
 
-test_that("validate_station_id() signals fallback when nothing is replicated", {
+test_that("validate_replication() signals fallback when nothing is replicated", {
   counts <- make_counts(4)
-  st <- validate_station_id(c("A", "B", "C", "D"), counts)
+  st <- validate_replication(c("A", "B", "C", "D"), counts)
 
   # Not an error and not a warning — unreplicated data stays fully supported,
   # the caller just uses the standard model instead.
@@ -66,10 +66,10 @@ test_that("validate_station_id() signals fallback when nothing is replicated", {
   expect_equal(st$n_stations, 4L)
 })
 
-test_that("validate_station_id() notes when very few stations are replicated", {
+test_that("validate_replication() notes when very few stations are replicated", {
   counts <- make_counts(7)
   expect_message(
-    validate_station_id(c("A", "A", "B", "C", "D", "E", "F"), counts),
+    validate_replication(c("A", "A", "B", "C", "D", "E", "F"), counts),
     "more than one replicate"
   )
 })
@@ -78,7 +78,7 @@ test_that("validate_station_id() notes when very few stations are replicated", {
 
 test_that("collapse_station_covariates() passes station-level covariates through", {
   counts <- make_counts(6)
-  st  <- validate_station_id(c("A", "A", "B", "B", "C", "C"), counts)
+  st  <- validate_replication(c("A", "A", "B", "B", "C", "C"), counts)
   cov <- data.frame(depth = c(10, 20, 30))
 
   expect_equal(collapse_station_covariates(cov, st), cov)
@@ -87,7 +87,7 @@ test_that("collapse_station_covariates() passes station-level covariates through
 
 test_that("collapse_station_covariates() collapses replicate-level covariates", {
   counts <- make_counts(6)
-  st  <- validate_station_id(c("A", "A", "B", "B", "C", "C"), counts)
+  st  <- validate_replication(c("A", "A", "B", "B", "C", "C"), counts)
   cov <- data.frame(depth = c(10, 10, 20, 20, 30, 30),
                     lat   = c(1, 1, 2, 2, 3, 3))
 
@@ -99,7 +99,7 @@ test_that("collapse_station_covariates() collapses replicate-level covariates", 
 
 test_that("collapse_station_covariates() collapses matrices too", {
   counts <- make_counts(6)
-  st  <- validate_station_id(c("A", "A", "B", "B", "C", "C"), counts)
+  st  <- validate_replication(c("A", "A", "B", "B", "C", "C"), counts)
   cov <- cbind(depth = c(10, 10, 20, 20, 30, 30))
 
   out <- collapse_station_covariates(cov, st)
@@ -109,7 +109,7 @@ test_that("collapse_station_covariates() collapses matrices too", {
 
 test_that("collapse_station_covariates() rejects covariates varying within a station", {
   counts <- make_counts(6)
-  st  <- validate_station_id(c("A", "A", "B", "B", "C", "C"), counts)
+  st  <- validate_replication(c("A", "A", "B", "B", "C", "C"), counts)
   cov <- data.frame(depth = c(10, 999, 20, 20, 30, 30))
 
   expect_error(collapse_station_covariates(cov, st), "vary between replicates")
@@ -117,7 +117,7 @@ test_that("collapse_station_covariates() rejects covariates varying within a sta
 
 test_that("collapse_station_covariates() rejects an unusable row count", {
   counts <- make_counts(6)
-  st  <- validate_station_id(c("A", "A", "B", "B", "C", "C"), counts)
+  st  <- validate_replication(c("A", "A", "B", "B", "C", "C"), counts)
 
   expect_error(
     collapse_station_covariates(data.frame(depth = 1:4), st),
@@ -154,13 +154,13 @@ test_that("replicate rows from metab_df sum to the collapsed count matrix", {
     values_fill = 0L
   )
 
-  station_id <- rep_wide$station
+  replication <- rep_wide$station
   rep_counts <- as.matrix(rep_wide[, !(names(rep_wide) %in% c("rep_key", "station"))])
 
   # The whole point: replicates are separate rows, and their per-station sums
   # reproduce exactly the matrix the summed workflow would have built.
   expect_gt(nrow(rep_counts), nrow(sim$counts))
-  summed <- rowsum(rep_counts, group = station_id)
+  summed <- rowsum(rep_counts, group = replication)
   summed <- summed[rownames(sim$counts), colnames(summed), drop = FALSE]
 
   expect_equal(
@@ -189,7 +189,7 @@ test_that("eDNA_dmm() falls back to the standard model when nothing is replicate
 
   expect_message(
     fit <- eDNA_dmm(sim$counts, covariates = cov, K = 2,
-                    station_id = rownames(sim$counts),
+                    replication = rownames(sim$counts),
                     iter = 400, warmup = 200, verbose = TRUE),
     "exactly 1 replicate"
   )
@@ -217,18 +217,18 @@ test_that("eDNA_dmm() fits the replicate model and returns station compositions"
     rep_long[, c("rep_key", "station", "Species", "Counts")],
     names_from = "Species", values_from = "Counts", values_fill = 0L
   )
-  station_id <- rep_wide$station
+  replication <- rep_wide$station
   rep_counts <- as.matrix(rep_wide[, !(names(rep_wide) %in% c("rep_key", "station"))])
 
-  station_cov <- sim$covariates[match(unique(station_id), sim$covariates$sample_id),
+  station_cov <- sim$covariates[match(unique(replication), sim$covariates$sample_id),
                                 c("Depth", "Distance_shore")]
 
   fit <- eDNA_dmm(rep_counts, covariates = station_cov, K = 2,
-                  station_id = station_id,
+                  replication = replication,
                   iter = 600, warmup = 300, verbose = FALSE)
 
   expect_true(fit$replicate)
-  expect_equal(fit$N, length(unique(station_id)))
+  expect_equal(fit$N, length(unique(replication)))
   expect_equal(fit$R, nrow(rep_counts))
 
   # theta is a composition per station
