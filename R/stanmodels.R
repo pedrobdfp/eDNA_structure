@@ -7,10 +7,10 @@
 # there is no precompiled module baked into the package's compiled code.
 #
 # The package ships two Stan programs:
-#   "dmm"     — the standard model, one row per sample (inst/stan/dmm.stan)
-#   "dmm_rep" — the replicate-aware hierarchical model (inst/stan/dmm_rep.stan)
+#   "dmm": the standard model, one row per sample (inst/stan/dmm.stan)
+#   "dmm_rep": the replicate-aware hierarchical model (inst/stan/dmm_rep.stan)
 # Each is compiled and cached independently, the first time it is actually used,
-# so users who never pass `station_id` never pay to compile "dmm_rep".
+# so users who never pass `replication` never pay to compile "dmm_rep".
 
 .eDNA_stanmodels_cache <- new.env(parent = emptyenv())
 

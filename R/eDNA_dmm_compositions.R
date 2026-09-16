@@ -1,6 +1,6 @@
 # =============================================================================
-# eDNA_dmm_compositions() — posterior community composition bar plots
-# dmm_taxon_order()      — shared taxon ranking driving both composition plots
+# eDNA_dmm_compositions(): posterior community composition bar plots
+# dmm_taxon_order(): shared taxon ranking driving both composition plots
 # =============================================================================
 
 #' Rank taxa by their weight in a fitted model
@@ -47,7 +47,7 @@ dmm_taxon_order <- function(fit, top_n = NULL) {
 #'   are collapsed into `"Other"`. Default `20`.
 #' @param base_size Base font size. Default `13`.
 #' @param title Plot title. Default auto-generated.
-#' @param subtitle Plot subtitle. Default auto-generated.
+#' @param subtitle Plot subtitle. Default `NULL`, meaning no subtitle.
 #' @param legend_position Legend position. Default `"right"`.
 #' @param bar_width Bar width. Default `0.7`.
 #'
@@ -75,11 +75,11 @@ eDNA_dmm_compositions <- function(
   # ── Which taxa to show ─────────────────────────────────────────────────────
   # Ranked by total posterior weight across communities. To make a companion
   # plot_true_compositions() figure use the SAME colours, pass this same set to
-  # its `taxa_include` argument — see dmm_taxon_order().
+  # its `taxa_include` argument: see dmm_taxon_order().
   top_taxa   <- dmm_taxon_order(fit, top_n)
   other_taxa <- setdiff(taxa_names, top_taxa)
   
-  # ── Structured color palette — identical to plot_true_compositions() ───────
+  # ── Structured color palette: identical to plot_true_compositions() ───────
   named_taxa <- sort(top_taxa)
   n_named    <- length(named_taxa)
   tax_colors <- make_taxa_colors(named_taxa,
@@ -107,10 +107,7 @@ eDNA_dmm_compositions <- function(
   
   # ── Titles ─────────────────────────────────────────────────────────────────
   title_str    <- title    %||% sprintf("Posterior community compositions  (K = %d)", K)
-  subtitle_str <- subtitle %||% sprintf(
-    "Posterior mean pi  |  top %d taxa  |  colors match observed composition plot",
-    min(top_n, ncol(pi_mean))
-  )
+  subtitle_str <- subtitle
   
   # ── Plot ───────────────────────────────────────────────────────────────────
   ggplot2::ggplot(

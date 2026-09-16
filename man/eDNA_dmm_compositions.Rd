@@ -24,7 +24,7 @@ are collapsed into \code{"Other"}. Default \code{20}.}
 
 \item{title}{Plot title. Default auto-generated.}
 
-\item{subtitle}{Plot subtitle. Default auto-generated.}
+\item{subtitle}{Plot subtitle. Default \code{NULL}, meaning no subtitle.}
 
 \item{legend_position}{Legend position. Default \code{"right"}.}
 

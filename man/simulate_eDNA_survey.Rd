@@ -53,12 +53,24 @@ Default \code{1}.}
 \item{...}{Additional arguments passed to \code{\link[=generate_community_compositions]{generate_community_compositions()}}.}
 }
 \value{
-A list with:
+A list. The first three elements mirror \code{\link[=get_example_data]{get_example_data()}} exactly,
+so code written against one works unchanged against the other:
 \describe{
-\item{\code{counts}}{Integer matrix \verb{N × S} ready for \code{\link[=eDNA_dmm]{eDNA_dmm()}}.}
-\item{\code{covariates}}{Data frame with \code{sample_id}, \code{TrueCommunity}, and
-covariate columns, ready for \code{\link[=eDNA_dmm]{eDNA_dmm()}}.}
-\item{\code{community_compositions}}{The true \verb{K × S} composition matrix.}
+\item{\code{counts}}{Integer matrix \verb{N x S}, samples in rows, ready for
+\code{\link[=eDNA_dmm]{eDNA_dmm()}}.}
+\item{\code{covariates}}{Data frame of \strong{numeric covariate columns only}, one
+row per sample, ready to pass straight to \code{\link[=eDNA_dmm]{eDNA_dmm()}}. Identifier and
+ground-truth columns are deliberately excluded: \code{\link[=eDNA_dmm]{eDNA_dmm()}} fits every
+column it is given, so a \code{sample_id} would be fitted as though it were
+an environmental gradient.}
+\item{\code{metadata}}{Data frame with \code{sample_id}, \code{TrueCommunity} and the
+covariate columns - the labelling columns, for the \code{metadata} argument
+of \code{\link[=plot_true_compositions]{plot_true_compositions()}} and \code{\link[=eDNA_dmm_structure]{eDNA_dmm_structure()}}.}
+}
+The remaining elements are the simulation's ground truth, for checking
+parameter recovery:
+\describe{
+\item{\code{community_compositions}}{The true \verb{K x S} composition matrix.}
 \item{\code{metab_df}}{Raw metabarcoding data frame.}
 \item{\code{sample_metadata}}{Full sample metadata data frame.}
 \item{\code{contributors}}{Output of \code{\link[=generate_contributors]{generate_contributors()}}.}

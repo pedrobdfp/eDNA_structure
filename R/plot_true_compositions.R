@@ -1,11 +1,11 @@
 # =============================================================================
-# plot_true_compositions() — visualize observed species composition per sample
+# plot_true_compositions(): visualize observed species composition per sample
 # =============================================================================
 
 #' Plot observed species composition per sample (pre-fit diagnostic)
 #'
 #' @description
-#' Produces a stacked bar plot of **observed species frequencies** — one bar
+#' Produces a stacked bar plot of **observed species frequencies**: one bar
 #' per sample, colored by species. This is a pre-fitting diagnostic that shows
 #' the raw community signal in your data before any model is applied. It uses
 #' the same visual format as [eDNA_dmm_structure()] so the two plots can be
@@ -15,7 +15,7 @@
 #' When `facet_row_var` is supplied, one sub-plot is built per row-level and
 #' they are assembled vertically with cowplot. This mirrors the original
 #' make_bar_figure() approach that gives each depth stratum its own
-#' proportional-width panels — the only architecture that keeps panel widths
+#' proportional-width panels, the only architecture that keeps panel widths
 #' proportional to sample count via space = "free_x".
 #'
 #' @param counts A numeric matrix or data frame of read counts (samples × taxa).
@@ -38,7 +38,7 @@
 #'   `top_n`.
 #' @param base_size Base font size. Default `11`.
 #' @param title Plot title. Default auto-generated.
-#' @param subtitle Plot subtitle. Default auto-generated.
+#' @param subtitle Plot subtitle. Default `NULL`, meaning no subtitle.
 #' @param show_legend Logical. Show the taxon legend. Default `FALSE` - a
 #'   full taxon legend is usually too large to be useful on this plot.
 #' @param legend_position Legend position. Default `"bottom"`.
@@ -82,7 +82,7 @@
 #' @param legend_text_size Font size of legend labels. Default `NULL`
 #'   (inherits from `base_size`).
 #' @param row_label_fn Function applied to each `facet_row_var` level to
-#'   produce its display label — e.g. `function(x) paste0(x, " m")` for a
+#'   produce its display label, e.g. `function(x) paste0(x, " m")` for a
 #'   depth column, or `function(x) paste0("Year: ", x)` for year. This is
 #'   what makes the label text generalize across datasets: it's tied to
 #'   whatever `facet_row_var` means for your data.
@@ -171,9 +171,18 @@ plot_true_compositions <- function(
   
   si <- plot_df
   if (!is.null(metadata)) {
-    if (!sample_id_col %in% names(metadata))
-      rlang::abort(paste0("Column '", sample_id_col, "' not found in `metadata`."))
-    si <- merge(si, metadata, by.x = "sample_id", by.y = sample_id_col, all.x = TRUE)
+    if (!is.data.frame(metadata))
+      rlang::abort("`metadata` must be a data frame.")
+    metadata <- as.data.frame(metadata)
+    metadata[[".edna_sample_id"]] <- resolve_metadata_ids(
+      metadata, sample_id_col, plot_df$sample_id
+    )
+    # Drop columns that already exist in `si` so the merge cannot emit .x/.y pairs
+    dup <- setdiff(intersect(names(metadata), names(si)), ".edna_sample_id")
+    if (length(dup))
+      metadata <- metadata[, setdiff(names(metadata), dup), drop = FALSE]
+    si <- merge(si, metadata, by.x = "sample_id", by.y = ".edna_sample_id",
+                all.x = TRUE, sort = FALSE)
   }
   
   named_taxa <- sort(top_taxa)
@@ -185,8 +194,7 @@ plot_true_compositions <- function(
   taxon_levels <- c(sort(top_taxa), if (length(other_taxa) > 0) "Other")
   
   title_str    <- title    %||% "Observed species composition"
-  subtitle_str <- subtitle %||% sprintf("%d samples  |  %d taxa shown individually",
-                                        N, length(top_taxa))
+  subtitle_str <- subtitle %||% ""
   
   build_panel <- function(dat, row_label = NULL, show_legend = FALSE,
                           show_title = FALSE, show_ylab = TRUE) {
@@ -206,7 +214,7 @@ plot_true_compositions <- function(
             # The position must be LOCAL to the panel. facet_grid(scales =
             # "free_x") drops unused levels and re-indexes each panel from 1, so
             # a global level index would land outside the panel and stretch its
-            # x range — which silently destroys the proportional panel widths
+            # x range: which silently destroys the proportional panel widths
             # that space = "free_x" is supposed to give.
             cape_x = match(
               .data$x_label[which.min(abs(.data[[vline_var]] - vline_value))],
@@ -298,7 +306,7 @@ plot_true_compositions <- function(
   }
   
   # In "ylab" mode each panel's y-axis title IS its row label. In "title" mode
-  # the row label moves to the panel title, so no panel carries an axis title —
+  # the row label moves to the panel title, so no panel carries an axis title: 
   # a shared one is drawn for the whole stack below.
   panels <- lapply(seq_along(row_levels), function(i) {
     lv  <- row_levels[i]
@@ -310,8 +318,8 @@ plot_true_compositions <- function(
   })
   panels <- Filter(Negate(is.null), panels)
   
-  # With both title and subtitle empty — the manuscript case, where that text
-  # belongs in the figure legend — the heading row is dropped entirely rather
+  # With both title and subtitle empty: the manuscript case, where that text
+  # belongs in the figure legend: the heading row is dropped entirely rather
   # than reserved as blank space above the panels.
   has_heading <- nzchar(title_str) || nzchar(subtitle_str)
   title_grob <- if (has_heading) {

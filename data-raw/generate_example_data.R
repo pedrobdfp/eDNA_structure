@@ -7,7 +7,7 @@
 # Produces two small, deliberately plain objects:
 #
 #   example_edna       - an unreplicated survey: one row of counts per site
-#   example_edna_reps  - the same survey with 3 bottle replicates per site
+#   example_edna_reps  - the same survey with 3 replicates per site
 #
 # Both are trimmed to what a user actually needs in order to fit a model. The
 # full simulation return object (contributor tables, per-organism shedding,
@@ -76,7 +76,7 @@ covariates <- data.frame(
 # This is what the plotting functions take as their `metadata` argument.
 metadata <- data.frame(
   sample_id        = rownames(counts),
-  TrueCommunity    = as.integer(sim$covariates$TrueCommunity),
+  TrueCommunity    = as.integer(sim$metadata$TrueCommunity),
   Depth            = as.numeric(sim$covariates$Depth),
   Distance_shore   = as.numeric(sim$covariates$Distance_shore),
   stringsAsFactors = FALSE
@@ -89,7 +89,7 @@ example_edna <- list(
 )
 
 # -----------------------------------------------------------------------------
-# 2. Replicated example: three bottle replicates per site
+# 2. Replicated example: three replicates per site
 # -----------------------------------------------------------------------------
 
 sim_rep <- do.call(simulate_eDNA_survey, c(sim_args, list(bio_reps = 3)))
@@ -111,12 +111,12 @@ rep_counts <- as.matrix(rep_wide[, !(names(rep_wide) %in% c("rep_key", "station"
 rownames(rep_counts)     <- rep_wide$rep_key
 storage.mode(rep_counts) <- "integer"
 
-rep_station_id <- rep_wide$station
+rep_replication <- rep_wide$station
 
 # Station-level covariates: one row per station, in order of first appearance
-station_levels <- unique(rep_station_id)
+station_levels <- unique(rep_replication)
 idx <- match(station_levels,
-             paste0("STN_", sprintf("%03d", sim_rep$covariates$SampleID)))
+             sim_rep$metadata$sample_id)
 
 rep_covariates <- data.frame(
   Depth          = as.numeric(sim_rep$covariates$Depth)[idx],
@@ -126,7 +126,7 @@ rep_covariates <- data.frame(
 
 rep_metadata <- data.frame(
   sample_id        = station_levels,
-  TrueCommunity    = as.integer(sim_rep$covariates$TrueCommunity)[idx],
+  TrueCommunity    = as.integer(sim_rep$metadata$TrueCommunity)[idx],
   Depth            = as.numeric(sim_rep$covariates$Depth)[idx],
   Distance_shore   = as.numeric(sim_rep$covariates$Distance_shore)[idx],
   stringsAsFactors = FALSE
@@ -134,7 +134,7 @@ rep_metadata <- data.frame(
 
 example_edna_reps <- list(
   counts     = rep_counts,
-  station_id = rep_station_id,
+  replication = rep_replication,
   covariates = rep_covariates,
   metadata   = rep_metadata
 )
@@ -149,8 +149,8 @@ cat("  read depth:", paste(range(rowSums(example_edna$counts)), collapse = "-"),
 
 cat("example_edna_reps\n")
 cat("  counts    :", paste(dim(example_edna_reps$counts), collapse = " x "), "\n")
-cat("  stations  :", length(unique(example_edna_reps$station_id)), "\n")
-cat("  reps/stn  :", paste(range(table(example_edna_reps$station_id)), collapse = "-"), "\n")
+cat("  stations  :", length(unique(example_edna_reps$replication)), "\n")
+cat("  reps/stn  :", paste(range(table(example_edna_reps$replication)), collapse = "-"), "\n")
 
 save(example_edna,      file = "data/example_edna.rda",      compress = "xz")
 save(example_edna_reps, file = "data/example_edna_reps.rda", compress = "xz")

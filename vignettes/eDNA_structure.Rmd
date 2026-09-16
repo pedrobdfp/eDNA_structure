@@ -29,7 +29,7 @@ environmental DNA (eDNA) read count data from metabarcoding surveys. The
 central question the model answers is:
 
 > *Given read count data from many sampling locations, how many distinct
-> ecological communities exist in my study area — and what environmental
+> ecological communities exist in my study area; and what environmental
 > variables predict which community a sample belongs to?*
 
 The model is appropriate whenever you have:
@@ -47,7 +47,7 @@ you can run everything yourself.
 
 # Installation
 
-## Step 1 — Install R
+## Step 1: Install R
 
 If you do not yet have R installed, download the latest version for your
 operating system from <https://cran.r-project.org/>. Version 4.1.0 or later
@@ -56,7 +56,7 @@ is required.
 We also strongly recommend installing **RStudio**, a free graphical interface
 for R: <https://posit.co/download/rstudio-desktop/>.
 
-## Step 2 — Install Stan and rstan
+## Step 2: Install Stan and rstan
 
 `eDNAstructure` uses the Stan probabilistic programming language for Bayesian
 inference. Stan has its own installation requirements beyond a standard R
@@ -84,7 +84,7 @@ The key steps are:
    If this runs without errors and produces output like `"SAMPLING FOR MODEL..."`,
    Stan is working correctly.
 
-## Step 3 — Install eDNAstructure
+## Step 3: Install eDNAstructure
 
 Install directly from GitHub using the `remotes` package:
 
@@ -99,7 +99,7 @@ remotes::install_github("pedrobdfp/eDNA_structure")
 This will also install the required R package dependencies automatically:
 `ggplot2`, `dplyr`, `tidyr`, `vegan`, `posterior`, `loo`, and `scales`.
 
-## Step 4 — Load the package
+## Step 4: Load the package
 
 ```{r load}
 library(eDNAstructure)
@@ -113,8 +113,8 @@ Before fitting a model, it helps to understand exactly what format the
 functions expect. We will use the built-in example dataset to illustrate.
 The model needs **two things**, and only the first is required:
 
-1. **A species/ASV × site table** — the count matrix.
-2. **A covariate table** — *optional*. Supply it only if you want to model how
+1. **A species/ASV × site table**: the count matrix.
+2. **A covariate table**: *optional*. Supply it only if you want to model how
    environmental variables drive community membership. `eDNA_dmm()` runs
    perfectly well without one.
 
@@ -160,12 +160,12 @@ fit <- eDNA_dmm(counts, covariates = covariates, K = 4)  # with them
 
 > **The covariate table must be numeric, and only numeric.** `eDNA_dmm()` fits
 > every column you hand it, so an identifier such as `sample_id`, or a label
-> such as `TrueCommunity`, must not be in it — the model would try to fit the
+> such as `TrueCommunity`, must not be in it, the model would try to fit the
 > ID as an environmental gradient. Keep those in a separate metadata frame and
 > pass it to the plotting functions' `metadata` argument instead. This is why
 > `get_example_data()` returns `covariates` and `metadata` as two objects.
 
-A replicated version, one row per bottle plus a `station_id` column, is in
+A replicated version, one row per sample plus a `replication` column, is in
 `example_edna_replicates_raw.csv` in the same folder. See *Replicated samples*
 below.
 
@@ -178,9 +178,9 @@ The most important input is a **sample × taxon count matrix**. The function
 - A `matrix` with non-negative integer values
 - Or a `data.frame` where every column is numeric
 
-Rows represent **samples** (individual water samples, stations, replicates —
+Rows represent **samples** (individual water samples, stations, replicates, 
 whatever your unit of observation is). Columns represent **taxa** or **ASVs**
-— taxonomic annotation is not required. The model is equally applicable to
+, taxonomic annotation is not required. The model is equally applicable to
 raw ASV tables and to taxonomically-collapsed count tables.
 
 ```{r count_matrix}
@@ -203,7 +203,7 @@ STN_003 1665  878   606   687   712  1018
 ```
 
 Each number is the count of sequencing reads assigned to that taxon in that
-sample. These are raw counts — **do not** normalize to proportions before
+sample. These are raw counts, **do not** normalize to proportions before
 fitting. The model handles composition estimation internally.
 
 **Key rules for the count matrix:**
@@ -212,7 +212,7 @@ fitting. The model handles composition estimation internally.
 |-------------|--------------------------|
 | All values ≥ 0 | Error with informative message |
 | No NA values | Error with informative message |
-| No all-zero rows | Error — empty samples cannot be modelled |
+| No all-zero rows | Error: empty samples cannot be modelled |
 | At least 2 columns | Error |
 | Integer values | Warning, then automatic coercion |
 | Row sums ≥ 100 | Warning (very low counts = unreliable compositions) |
@@ -366,7 +366,7 @@ The summary prints:
 
 1. **Alpha (overdispersion)**: typical values for eDNA data are 1–5.
    High alpha (>10) means counts are nearly multinomial (low overdispersion).
-   Low alpha (~1) means very high overdispersion — typical for eDNA.
+   Low alpha (~1) means very high overdispersion, typical for eDNA.
 
 2. **Assignment certainty**: the fraction of samples with ≥80% probability
    of belonging to one community. High certainty (>90%) means the two
@@ -402,14 +402,14 @@ fit_k2$alpha_mean
 
 # Replicated samples
 
-If a station was sequenced more than once — PCR replicates, or separate bottles
-from the same water — give each replicate its own row of `counts` and use
-`station_id` to say which rows belong together. **Do not sum them.**
+If a station was sequenced more than once, PCR replicates, or separate bottles
+from the same water, give each replicate its own row of `counts` and use
+`replication` to say which rows belong together. **Do not sum them.**
 
 ```{r replicates, eval=FALSE}
 fit_rep <- eDNA_dmm(
   counts     = rep_counts,   # one row per replicate
-  station_id = station_id,   # which rows belong to the same station
+  replication = replication,   # which rows belong to the same station
   covariates = station_covs, # station-level covariates
   K          = 4
 )
@@ -425,25 +425,25 @@ theta_i ~ Dirichlet(alpha * pi_k)                      # the station's compositi
 y_ir    ~ DirichletMultinomial(N_ir, phi * theta_i)    # each replicate
 ```
 
-giving two dispersion parameters that answer different questions — `alpha` for
+giving two dispersion parameters that answer different questions, `alpha` for
 how tightly *stations* cluster around their community, and `phi` for how tightly
 *replicates* cluster around their own station.
 
 **Why not just sum the replicates?** Summing would be lossless if replicates were
 plain multinomial draws from the station's composition. They are informative
 precisely *because* they are overdispersed relative to multinomial (PCR
-jackpotting, uneven template, bottle effects). That scatter is the signal, and
+jackpotting, uneven template, sampling effects). That scatter is the signal, and
 summing discards it.
 
-Ragged replication is fine — stations may have different numbers of replicates,
+Ragged replication is fine, stations may have different numbers of replicates,
 and a station with only one is still fitted normally. If *no* station has more
 than one replicate, `alpha` and `phi` are not separately identified, so
-`eDNA_dmm()` falls back to the standard model and tells you. Leave `station_id`
+`eDNA_dmm()` falls back to the standard model and tells you. Leave `replication`
 unset whenever each row is an independent sample; that is the standard model and
 the right choice for unreplicated data.
 
 > The full tutorial (`vignette("tutorial")`) works through a complete replicated
-> survey — simulating it, reshaping it into model input, fitting it, and checking
+> survey, simulating it, reshaping it into model input, fitting it, and checking
 > parameter recovery for `phi`.
 
 ---
@@ -492,7 +492,7 @@ loo_result$loo_table
 - **Higher LOO-ELPD** = better predictive performance = better model
 - The "elbow" is the K beyond which improvements are negligible
 - If two models are within ~2 SE of each other, prefer the simpler one (lower K)
-- Biologically, K should also be interpretable — resist the urge to over-split
+- Biologically, K should also be interpretable, resist the urge to over-split
 
 For the example data (which was generated with K = 3), the LOO-ELPD should
 peak around K = 3 before levelling off. The model successfully recovers the
@@ -530,14 +530,14 @@ can:
 > supplied, because they build one sub-plot per row level to keep panel widths
 > proportional to sample count. Adding ggplot2 layers with `+` will not work on
 > those; style them through the functions' own arguments instead. Both also take
-> a large set of layout arguments — two-way faceting, row labels, legend
-> geometry, reference lines — that are covered in
+> a large set of layout arguments, two-way faceting, row labels, legend
+> geometry, reference lines; that are covered in
 > `vignette("tutorial")` under *Publication layouts*.
 
 ## Structure plot
 
 The **structure plot** shows posterior community membership probabilities for
-each sample as stacked bars — the classic "STRUCTURE" visualization familiar
+each sample as stacked bars, the classic "STRUCTURE" visualization familiar
 from population genetics.
 
 ```{r structure_basic}
@@ -603,7 +603,7 @@ p_structure +
 
 Where the structure plot answers "which community does each *sample* belong
 to?", `eDNA_dmm_compositions()` answers "what does each *community* look like
-in species space?" — the posterior mean composition of each community.
+in species space?", the posterior mean composition of each community.
 
 ```{r compositions}
 eDNA_dmm_compositions(
@@ -615,7 +615,7 @@ eDNA_dmm_compositions(
 
 Colours are shared with `plot_true_compositions()` and `eDNA_dmm_structure()`,
 so the same taxon keeps the same colour across plots. That sharing is only
-automatic when the plots are drawn from the same taxon set — if you put an
+automatic when the plots are drawn from the same taxon set, if you put an
 observed-composition plot next to a fitted one, rank the taxa once and pass the
 same set to both:
 
@@ -696,7 +696,7 @@ beta_result$plot
   the reference).
 - If the colored peak is shifted clearly away from grey (and from zero), that
   covariate has a genuine effect on community membership.
-- The annotation shows the posterior mean, 90% CI, and P(direction) — the
+- The annotation shows the posterior mean, 90% CI, and P(direction), the
   probability that the coefficient has the sign it appears to have.
 
 For the example data, you should see:
@@ -719,9 +719,9 @@ beta_result$table
 
 The **reliability** column classifies each coefficient based on its
 effective sample size (ESS):
-- `"trustworthy"`: ESS > 400 — use these with confidence
-- `"cautious"`: ESS 100–400 — treat as indicative, not definitive
-- `"unreliable"`: ESS < 100 — do not interpret; run longer chains
+- `"trustworthy"`: ESS > 400, use these with confidence
+- `"cautious"`: ESS 100–400, treat as indicative, not definitive
+- `"unreliable"`: ESS < 100, do not interpret; run longer chains
 
 ```{r beta_save}
 ggplot2::ggsave(
@@ -840,13 +840,13 @@ the posterior geometry. Try:
 
 1. Increase `adapt_delta` toward 0.99: `eDNA_dmm(..., adapt_delta = 0.99)`
 2. Increase `max_treedepth` to 14 or 15
-3. Reduce K — more communities require more complex geometry
+3. Reduce K, more communities require more complex geometry
 4. Check that all-zero taxa have been removed from your count matrix
 
 ## Very low ESS for beta parameters
 
 Low beta ESS often means the covariate has little effect and the posterior
-is flat. This is not necessarily a problem — it means the data do not support
+is flat. This is not necessarily a problem; it means the data do not support
 that covariate driving community structure. Check the beta plot: if the
 posterior looks nearly identical to the prior, the data are uninformative
 about that effect.

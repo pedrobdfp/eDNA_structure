@@ -33,15 +33,15 @@ test_that("get_example_data() covariates go straight into eDNA_dmm()", {
 test_that("get_example_replicates() returns the correct structure", {
   r <- get_example_replicates()
   expect_type(r, "list")
-  expect_named(r, c("counts", "station_id", "covariates", "metadata"),
+  expect_named(r, c("counts", "replication", "covariates", "metadata"),
                ignore.order = TRUE)
 
   expect_true(is.matrix(r$counts))
   expect_type(r$counts, "integer")
-  expect_type(r$station_id, "character")
-  expect_equal(length(r$station_id), nrow(r$counts))
+  expect_type(r$replication, "character")
+  expect_equal(length(r$replication), nrow(r$counts))
 
-  n_stations <- length(unique(r$station_id))
+  n_stations <- length(unique(r$replication))
   expect_gt(nrow(r$counts), n_stations)          # more rows than stations
   expect_equal(nrow(r$covariates), n_stations)   # covariates are station-level
   expect_equal(nrow(r$metadata), n_stations)
@@ -49,7 +49,7 @@ test_that("get_example_replicates() returns the correct structure", {
   expect_true(all(vapply(r$covariates, is.numeric, logical(1))))
 
   # Replication is balanced at 3 bottles per station
-  expect_true(all(table(r$station_id) == 3L))
+  expect_true(all(table(r$replication) == 3L))
 })
 
 test_that("validate_counts() catches bad inputs", {
@@ -113,9 +113,9 @@ test_that("make_community_colors() returns correct number of colors", {
 })
 
 test_that("shipped raw CSVs split into the documented tables", {
-  # Guards the "Starting from one file" recipe in the README and the Getting
-  # Started vignette: splitting the shipped CSV must reproduce the objects
-  # get_example_data() returns.
+  # Guards the split recipe in the Getting Started vignette: splitting the
+  # shipped CSV must reproduce the objects get_example_data() returns.
+
   path <- system.file("extdata", "example_edna_raw.csv", package = "eDNAstructure")
   expect_true(nzchar(path))
 
@@ -135,17 +135,17 @@ test_that("shipped raw CSVs split into the documented tables", {
   expect_true(all(vapply(covariates, is.numeric, logical(1))))
 })
 
-test_that("shipped replicate CSV carries a station_id column", {
+test_that("shipped replicate CSV carries a replication column", {
   path <- system.file("extdata", "example_edna_replicates_raw.csv",
                       package = "eDNAstructure")
   expect_true(nzchar(path))
 
   raw <- utils::read.csv(path, check.names = FALSE)
-  expect_true(all(c("replicate_id", "station_id") %in% names(raw)))
+  expect_true(all(c("replicate_id", "replication") %in% names(raw)))
   expect_equal(nrow(raw), 60L)
-  expect_equal(length(unique(raw$station_id)), 20L)
+  expect_equal(length(unique(raw$replication)), 20L)
 
   # Covariates are constant within a station, so collapsing gives one row each
-  cov <- unique(raw[, c("station_id", "Depth", "Distance_shore")])
+  cov <- unique(raw[, c("replication", "Depth", "Distance_shore")])
   expect_equal(nrow(cov), 20L)
 })

@@ -2,13 +2,13 @@
 
 **Dirichlet-Multinomial Mixture Models for eDNA Metabarcoding Community Structure**
 
-`eDNAstructure` is an R package for fitting Bayesian Dirichlet-Multinomial Mixture (DMM) models to environmental DNA (eDNA) read count data from metabarcoding surveys. Given a sample × taxon count matrix and optional environmental covariates, the model identifies latent ecological communities, estimates their taxonomic compositions, and quantifies how environmental gradients drive community membership — all within a fully Bayesian framework with principled uncertainty quantification.
+`eDNAstructure` is an R package for fitting Bayesian Dirichlet-Multinomial Mixture (DMM) models to environmental DNA (eDNA) read count data from metabarcoding surveys. Given a sample × taxon count matrix and optional environmental covariates, the model identifies latent ecological communities, estimates their taxonomic compositions, and quantifies how environmental gradients drive community membership, all within a fully Bayesian framework with principled uncertainty quantification.
 
 ---
 
 ## Installation
 
-### Step 1 — Install a C++ toolchain
+### Step 1: Install a C++ toolchain
 
 Stan compiles models to C++ and requires a toolchain on your machine:
 
@@ -16,7 +16,7 @@ Stan compiles models to C++ and requires a toolchain on your machine:
 - **macOS**: Run `xcode-select --install` in Terminal
 - **Linux**: Install `build-essential` (Ubuntu/Debian) or equivalent
 
-### Step 2 — Install rstan
+### Step 2: Install rstan
 
 ```r
 install.packages("rstan")
@@ -31,14 +31,14 @@ example(stan_model, package = "rstan", run.dontrun = TRUE)
 
 If you see sampling output without errors, Stan is ready. Full guide: <https://mc-stan.org/rstan/articles/rstan.html>
 
-### Step 3 — Install eDNAstructure
+### Step 3: Install eDNAstructure
 
 ```r
 install.packages("remotes")
 remotes::install_github("pedrobdfp/eDNA_structure", upgrade = "never")
 ```
 
-During installation, a large amount of black text will appear — this is the Stan model compiling to C++. It only happens once. Every subsequent call to `eDNA_dmm()` goes straight to sampling with no compilation output.
+During installation, a large amount of black text will appear; this is the Stan model compiling to C++. It only happens once. Every subsequent call to `eDNA_dmm()` goes straight to sampling with no compilation output.
 
 ### Dependencies
 
@@ -64,7 +64,7 @@ library(eDNAstructure)
 # The built-in example: a site-by-taxon count table plus two numeric covariates
 data <- get_example_data()
 
-data$counts[1:3, 1:5]   # 20 sites x 33 taxa — this is all the model needs
+data$counts[1:3, 1:5]   # 20 sites x 33 taxa: this is all the model needs
 head(data$covariates)   # Depth, Distance_shore (numeric only)
 
 # Look at the raw composition before fitting anything
@@ -98,24 +98,24 @@ eDNA_dmm_beta(fit)$plot      # prior vs posterior for covariate effects
 loo_result <- eDNA_loo(data$counts, data$covariates, K_range = 2:5)
 loo_result$plot        # elbow plot
 
-# All fitted models are stored — no need to refit
+# All fitted models are stored: no need to refit
 fit <- loo_result$fits[["K4"]]
 ```
 
 ### If you have replicates
 
-Don't sum them. Give each replicate its own row and group them with `station_id`:
+Don't sum them. Give each replicate its own row and group them with `replication`:
 
 ```r
 r <- get_example_replicates()
 
-dim(r$counts)          # 60 replicates x 33 taxa — one row per bottle
-head(r$station_id, 6)  # which site each row came from
-nrow(r$covariates)     # 20 — covariates stay station-level
+dim(r$counts)          # 60 replicates x 33 taxa: one row per sample
+head(r$replication, 6)  # which site each row came from
+nrow(r$covariates)     # 20: covariates stay station-level
 
 fit_rep <- eDNA_dmm(
   counts     = r$counts,
-  station_id = r$station_id,   # <- this switches on the hierarchical model
+  replication = r$replication,   # <- this switches on the hierarchical model
   covariates = r$covariates,
   K          = 4
 )
@@ -125,24 +125,32 @@ fit_rep$phi_mean   # replicate reproducibility
 
 ### Simulating your own data
 
-`simulate_eDNA_survey()` generates surveys with known ground truth for method validation. Note that it returns the **full simulation object**, which is shaped differently from `get_example_data()` — `$covariates` there includes ground-truth columns, so subset it before fitting:
+`simulate_eDNA_survey()` generates surveys with known ground truth, for method validation or teaching. It returns `counts`, `covariates` and `metadata` with **exactly the same meaning** as `get_example_data()`, so everything above works unchanged; only the first line differs:
 
 ```r
-sim <- simulate_eDNA_survey(
+# Option A: the built-in example
+data <- get_example_data()
+
+# Option B: simulate one with known ground truth
+data <- simulate_eDNA_survey(
   n_communities         = 4,
   n_species             = 40,
   samples_per_community = 5,
   seed                  = 2026
 )
 
-fit <- eDNA_dmm(
-  counts     = sim$counts,
-  covariates = sim$covariates[, c("Depth", "Distance_shore")],   # subset needed
-  K          = 4
-)
+# ...and from here the code is identical for either option
+plot_true_compositions(data$counts, metadata = data$metadata,
+                       facet_var = "TrueCommunity")
+
+fit <- eDNA_dmm(counts = data$counts, covariates = data$covariates, K = 4)
+
+eDNA_dmm_structure(fit, metadata = data$metadata, facet_var = "TrueCommunity")
 ```
 
-> **For a complete walkthrough** — including step-by-step simulation, data formatting, K selection, all visualization options, parameter recovery, and troubleshooting — see the **[full tutorial vignette](vignettes/tutorial.Rmd)**. It is designed to be read start to finish and assumes no prior familiarity with Bayesian mixture models.
+Option B additionally returns the ground truth needed to check parameter recovery, `community_compositions`, `metab_df`, `sample_metadata` and `contributors`. Those are extras; the three fields above behave identically either way.
+
+> **For a complete walkthrough**, including step-by-step simulation, data formatting, K selection, all visualization options, parameter recovery, and troubleshooting, see the **[full tutorial vignette](vignettes/tutorial.Rmd)**. It is designed to be read start to finish and assumes no prior familiarity with Bayesian mixture models.
 
 ---
 
@@ -150,78 +158,15 @@ fit <- eDNA_dmm(
 
 The model needs **two things**, and only the first is required:
 
-1. **A species/ASV × site table** — the count matrix. This is the only required input.
-2. **A covariate table** — *optional*. Supply it only if you want to model how environmental variables drive community membership. `eDNA_dmm()` runs perfectly well without it.
-
-### Starting from one file
-
-In practice your data usually arrive as a single spreadsheet with sample IDs, environmental variables and counts all side by side. A file of exactly that shape ships with the package so you can see the split:
-
-```r
-path <- system.file("extdata", "example_edna_raw.csv", package = "eDNAstructure")
-raw  <- read.csv(path, check.names = FALSE)
-
-raw[1:3, 1:7]
-#   sample_id Depth Distance_shore TrueCommunity Sp_1 Sp_2 Sp_10
-# 1   STN_001 86.25         201.95             1   34  154  3922
-# 2   STN_002 73.33         197.48             1 1280  189  1366
-# 3   STN_003 75.76         208.23             1 1665  878   606
-```
-
-Split it into the two tables:
-
-```r
-# Which columns hold taxa? Adjust this one line to match your own file --
-# a name prefix, a known column range, or setdiff() against your metadata names.
-taxon_cols <- grep("^Sp_", names(raw))
-
-# 1. THE SPECIES/ASV x SITE TABLE  — required
-counts <- as.matrix(raw[, taxon_cols])
-rownames(counts) <- raw$sample_id
-storage.mode(counts) <- "integer"
-
-# 2. THE COVARIATE TABLE — optional, numeric columns only
-covariates <- raw[, c("Depth", "Distance_shore")]
-rownames(covariates) <- raw$sample_id
-```
-
-```r
-fit <- eDNA_dmm(counts, K = 4)                     # without covariates
-fit <- eDNA_dmm(counts, covariates = covariates, K = 4)   # with them
-```
-
-> **The covariate table must be numeric, and only numeric.** `eDNA_dmm()` fits every column you give it, so an identifier column such as `sample_id`, or a label such as `TrueCommunity`, must not be in it — the model would try to fit the ID as an environmental gradient. Keep those in a separate metadata frame and pass it to the plotting functions' `metadata` argument instead.
-
-If you have replicates, `inst/extdata/example_edna_replicates_raw.csv` shows that shape — one row per bottle plus a `station_id` column:
-
-```r
-path <- system.file("extdata", "example_edna_replicates_raw.csv", package = "eDNAstructure")
-raw  <- read.csv(path, check.names = FALSE)
-
-raw[1:4, 1:6]
-#   replicate_id station_id Depth Distance_shore TrueCommunity Sp_1
-# 1   STN_001_B1    STN_001 74.29         190.19             1  561
-# 2   STN_001_B2    STN_001 74.29         190.19             1  628
-# 3   STN_001_B3    STN_001 74.29         190.19             1  230
-# 4   STN_002_B1    STN_002 81.64         203.72             1  845
-
-counts     <- as.matrix(raw[, grep("^Sp_", names(raw))])
-rownames(counts) <- raw$replicate_id
-station_id <- raw$station_id            # <- groups the rows
-
-# Covariates stay station-level: one row per station, not per replicate
-covariates <- unique(raw[, c("station_id", "Depth", "Distance_shore")])
-rownames(covariates) <- covariates$station_id
-covariates$station_id <- NULL
-```
-
+1. **A species/ASV × site table**: the count matrix. This is the only required input.
+2. **A covariate table**: *optional*. Supply it only if you want to model how environmental variables drive community membership. `eDNA_dmm()` runs perfectly well without it.
 
 ### Count matrix
 
 The primary input to `eDNA_dmm()` is a **sample × taxon** matrix of non-negative integer read counts:
 
 - **Rows** = samples (stations, replicates, individuals, etc.)
-- **Columns** = taxa or ASVs — taxonomic annotation is not required
+- **Columns** = taxa or ASVs, taxonomic annotation is not required
 - **Values** = raw integer read counts (do not normalize)
 
 ```r
@@ -256,7 +201,7 @@ head(data$metadata)
 
 ### Replicates (optional)
 
-If a station was sequenced more than once (PCR or bottle replicates), give each replicate its own row and use `station_id` to say which rows belong together. Do **not** sum them — see [Replicated samples](#replicated-samples--station_id) below for why.
+If a station was sequenced more than once (PCR or sampling replicates), give each replicate its own row and use `replication` to say which rows belong together. Do **not** sum them. See [Replicated samples](#replicated-samples-replication) below for why.
 
 ```r
 rep_counts[1:4, 1:4]
@@ -266,18 +211,18 @@ rep_counts[1:4, 1:4]
 # STN_002_B1       380   270   101    58
 # STN_002_B2       395   281    95    64
 
-station_id <- c("STN_001", "STN_001", "STN_002", "STN_002")
+replication <- c("STN_001", "STN_001", "STN_002", "STN_002")
 ```
 
-Covariates stay **station-level**: supply either one row per station (in order of first appearance in `station_id`) or one row per row of `counts`, in which case they are collapsed automatically. Replication may be ragged — stations can have different numbers of replicates, and stations with a single replicate are fully supported.
+Covariates stay **station-level**: supply either one row per station (in order of first appearance in `replication`) or one row per row of `counts`, in which case they are collapsed automatically. Replication may be ragged, stations can have different numbers of replicates, and stations with a single replicate are fully supported.
 
-Leave `station_id` unset if each row is an independent sample. That is the standard model and the right choice for unreplicated data.
+Leave `replication` unset if each row is an independent sample. That is the standard model and the right choice for unreplicated data.
 
 ---
 
 ## Functions
 
-### `eDNA_dmm()` — Fit the DMM
+### `eDNA_dmm()`: Fit the DMM
 
 The core function. Fits a Dirichlet-Multinomial Mixture model via Stan and returns an `edna_dmm_fit` object.
 
@@ -286,7 +231,7 @@ fit <- eDNA_dmm(
   counts           = my_counts,   # sample × taxon integer count matrix
   covariates       = my_covs,     # sample × covariate data frame, or NULL
   K                = 4,           # number of latent communities to fit
-  station_id       = NULL,        # group replicate rows into stations; NULL = each row
+  replication       = NULL,        # group replicate rows into stations; NULL = each row
                                   # is an independent sample. See "Replicated samples" below
   scale_covariates = TRUE,        # Z-score standardize covariates (strongly recommended)
   chains           = 1,           # number of MCMC chains (see note on label switching below)
@@ -300,7 +245,7 @@ fit <- eDNA_dmm(
   alpha_rate       = 2,           # Gamma prior rate  (prior mean = shape/rate = 2.5)
   phi_shape        = 2,           # Gamma prior shape for replicate dispersion phi
   phi_rate         = 0.02,        # Gamma prior rate  (prior mean = 100)
-                                  # phi_* are used only when station_id is supplied
+                                  # phi_* are used only when replication is supplied
   verbose          = TRUE         # print sampling progress
 )
 ```
@@ -317,13 +262,13 @@ The returned `edna_dmm_fit` object contains:
 | `phi_mean` | Scalar: posterior mean replicate dispersion (replicate model only, else `NULL`) |
 | `stan_fit` | Raw `rstan::stanfit` object for advanced diagnostics |
 
-> **On single chains:** Mixture models suffer from label switching across chains — "Community 1" in chain A may map to "Community 2" in chain B, making multi-chain Rhat diagnostics meaningless. A single long chain sidesteps this. Use within-chain ESS (reported by `summary()`) as your convergence criterion.
+> **On single chains:** Mixture models suffer from label switching across chains, "Community 1" in chain A may map to "Community 2" in chain B, making multi-chain Rhat diagnostics meaningless. A single long chain sidesteps this. Use within-chain ESS (reported by `summary()`) as your convergence criterion.
 
 ---
 
-### Replicated samples — `station_id`
+### Replicated samples: `replication`
 
-If your stations have PCR or bottle replicates, pass each replicate as its own row of `counts` and use `station_id` to group them. This switches `eDNA_dmm()` to a hierarchical model that estimates each station's own composition:
+If your stations have PCR or sampling replicates, pass each replicate as its own row of `counts` and use `replication` to group them. This switches `eDNA_dmm()` to a hierarchical model that estimates each station's own composition:
 
 ```
 theta_i ~ Dirichlet(alpha * pi_k)                      # the station's true composition
@@ -335,12 +280,12 @@ There are then two dispersion parameters answering two different questions:
 | Parameter | Meaning |
 |-----------|---------|
 | `alpha` | How tightly **stations** cluster around their community composition (same as in the standard model) |
-| `phi` | How tightly **replicates** cluster around their own station — replicate reproducibility |
+| `phi` | How tightly **replicates** cluster around their own station: replicate reproducibility |
 
 ```r
 fit <- eDNA_dmm(
   counts     = rep_counts,        # one row per replicate
-  station_id = station_id,        # which rows belong to the same station
+  replication = replication,        # which rows belong to the same station
   covariates = station_covs,      # station-level covariates
   K          = 4,
   phi_shape  = 2,                 # Gamma prior on phi (default mean 100)
@@ -351,18 +296,18 @@ fit$theta_mean   # [N stations × S taxa] posterior mean station compositions
 fit$phi_mean     # posterior mean replicate reproducibility
 ```
 
-**Why not just sum the replicates?** Summing would be lossless if replicates were plain multinomial draws from the station's composition — their sum is a sufficient statistic, and integrating the station composition out gives you back exactly the standard model. Replicates are informative *precisely because* they are overdispersed relative to multinomial (PCR jackpotting, uneven template, bottle effects). Replicate concordance versus scatter is the signal, and summing discards it.
+**Why not just sum the replicates?** Summing would be lossless if replicates were plain multinomial draws from the station's composition, their sum is a sufficient statistic, and integrating the station composition out gives you back exactly the standard model. Replicates are informative *precisely because* they are overdispersed relative to multinomial (PCR jackpotting, uneven template, sampling effects). Replicate concordance versus scatter is the signal, and summing discards it.
 
 Practical notes:
 
-- **Ragged replication is fine.** Stations may have different numbers of replicates. A station with only one replicate is still fitted normally — its `theta_i` is informed by that replicate plus shrinkage toward `alpha * pi_k`, using a `phi` learned from the replicated stations.
-- **Unreplicated data is unaffected.** If no station has more than one replicate, `alpha` and `phi` are not separately identified and the replicate model would buy you nothing, so `eDNA_dmm()` uses the standard model instead and tells you. Leaving `station_id` unset is always the right choice when each row is an independent sample.
+- **Ragged replication is fine.** Stations may have different numbers of replicates. A station with only one replicate is still fitted normally; its `theta_i` is informed by that replicate plus shrinkage toward `alpha * pi_k`, using a `phi` learned from the replicated stations.
+- **Unreplicated data is unaffected.** If no station has more than one replicate, `alpha` and `phi` are not separately identified and the replicate model would buy you nothing, so `eDNA_dmm()` uses the standard model instead and tells you. Leaving `replication` unset is always the right choice when each row is an independent sample.
 - **`sample_info` is still one row per station**, so `eDNA_dmm_structure()`, `eDNA_dmm_nmds()` and `eDNA_dmm_beta()` all work unchanged.
 - **K selection stays on the standard model.** `eDNA_loo()` deliberately uses the summed model: with a per-station `theta_i`, holding out a station leaves its own parameter unidentified, so station-level LOO is not well defined. The replicate model is slower too, which matters when sweeping many K values.
 
 ---
 
-### `eDNA_dmm_structure()` — Structure bar plot
+### `eDNA_dmm_structure()`: Structure bar plot
 
 Produces a STRUCTURE-style plot: one vertical bar per sample, divided into colored segments by posterior community membership probability.
 
@@ -372,7 +317,7 @@ p <- eDNA_dmm_structure(
   metadata         = my_metadata,     # data frame with additional sample variables
   sample_id_col    = "sample_id",     # column in metadata matching sample IDs in fit
   facet_var        = "year",          # column facets
-  facet_row_var    = "depth_bin",     # row facets — see below
+  facet_row_var    = "depth_bin",     # row facets: see below
   sort_var         = "Depth",         # sort samples within each panel
   community_colors = NULL,            # named hex vector, e.g. c("Community 1" = "#E63946")
                                       # or NULL for automatic HCL palette
@@ -391,7 +336,7 @@ Returns a `ggplot2` object, or a **cowplot grid object** when `facet_row_var` is
 
 #### Layout, labels and legend
 
-`eDNA_dmm_structure()` shares its entire layout parameter surface with `plot_true_compositions()` — by design, so the two plots can be stacked into one figure and line up exactly. All of these behave identically in both functions:
+`eDNA_dmm_structure()` shares its entire layout parameter surface with `plot_true_compositions()`, by design, so the two plots can be stacked into one figure and line up exactly. All of these behave identically in both functions:
 
 | Group | Parameters |
 |---|---|
@@ -401,39 +346,46 @@ Returns a `ggplot2` object, or a **cowplot grid object** when `facet_row_var` is
 | Axis / strip sizing | `ylab`, `ylab_size`, `ylab_rel_width`, `strip_text_size`, `axis_text_size` |
 | Reference lines | `vline_var`, `vline_value`, `vline_color`, `vline_linetype`, `vline_linewidth` |
 
-See [`plot_true_compositions()`](#plot_true_compositions--raw-species-composition) above for the full description of each group. Two differences:
+See [`plot_true_compositions()`](#plot_true_compositions-raw-species-composition) above for the full description of each group. Two differences:
 
 - `ylab` defaults to `"Membership probability"` here (vs `"Proportion"`).
 - `axis_text_size` (y-axis tick label size) exists here only. Default `NULL` = ggplot2's own scaling from `base_size`.
 
 #### Stacking the observed and fitted plots
 
-The common case — raw composition on top, community assignment below, sharing panel structure:
+The common case, raw composition on top, community assignment below, sharing panel structure:
 
 ```r
+data <- get_example_data()
+fit  <- eDNA_dmm(counts = data$counts, covariates = data$covariates, K = 4)
+
+# A second grouping variable, to get rows of panels as well as columns
+meta <- data$metadata
+meta$depth_bin <- ifelse(meta$Depth > 50, 80, 10)
+
 common <- list(
   metadata      = meta,
-  facet_var     = "year",
-  facet_row_var = "depth_bin",
+  facet_var     = "TrueCommunity",   # columns
+  facet_row_var = "depth_bin",       # rows
   sort_var      = "Depth",
   row_label_fn  = function(x) paste0(x, " m"),
   base_size     = 11
 )
 
 p_obs <- do.call(plot_true_compositions,
-                 c(list(counts, taxa_include = dmm_taxon_order(fit, 20)), common))
+                 c(list(data$counts, taxa_include = dmm_taxon_order(fit, 20)), common))
 p_fit <- do.call(eDNA_dmm_structure,
                  c(list(fit, panel_labels = FALSE), common))
 
 cowplot::plot_grid(p_obs, p_fit, ncol = 1, rel_heights = c(1, 1))
 ```
 
-Set `panel_labels = FALSE` on the inner plots when the outer figure supplies its own (a), (b) letters — otherwise you get two competing sets.
+Set `panel_labels = FALSE` on the inner plots when the outer figure supplies its own (a), (b) letters, otherwise you get two competing sets.
 
 ---
 
 
-### `eDNA_dmm_nmds()` — NMDS ordination
+### `eDNA_dmm_nmds()`: NMDS ordination
 
 Runs NMDS on community dissimilarities and plots samples colored by their MAP community assignment. Point **size** reflects assignment certainty: larger points are more confidently assigned to a single community.
 
@@ -464,7 +416,7 @@ result$nmds   # vegan::metaMDS object (access stress value, species scores, etc.
 
 ---
 
-### `eDNA_dmm_beta()` — Covariate effects
+### `eDNA_dmm_beta()`: Covariate effects
 
 Overlays the prior and posterior distributions for each softmax regression coefficient. A posterior pulled away from the prior is evidence that the covariate genuinely predicts community membership.
 
@@ -475,7 +427,7 @@ result <- eDNA_dmm_beta(
                                    # "separate": one row per community, one column per covariate
   covariates_to_plot = NULL,       # character vector of covariate names to include, or NULL for all
   show_intercept     = FALSE,      # include the intercept term?
-  beta_prior_sd      = 1.0,        # prior SD — must match the Stan model (default: Normal(0,1))
+  beta_prior_sd      = 1.0,        # prior SD: must match the Stan model (default: Normal(0,1))
   n_prior_samples    = 4000,       # prior draws for the density curve (more = smoother)
   community_colors   = NULL,       # named hex vector or NULL
   prior_color        = "grey60",   # fill color for the prior density
@@ -493,7 +445,7 @@ result$table   # data frame: mean, 90% CI, P(direction), ESS, reliability per co
 
 ---
 
-### `eDNA_loo()` — K selection via LOO cross-validation
+### `eDNA_loo()`: K selection via LOO cross-validation
 
 Fits models across a range of K values and compares them using Leave-One-Out cross-validation. Returns an elbow plot and a comparison table to guide K selection.
 
@@ -522,9 +474,9 @@ loo_result$fits        # named list of edna_dmm_fit objects, one per K
 
 ---
 
-### `plot_true_compositions()` — Raw species composition
+### `plot_true_compositions()`: Raw species composition
 
-Visualizes observed species frequencies per sample as stacked bars — the same layout as `eDNA_dmm_structure()`, allowing direct before/after comparison. Most useful before fitting to inspect the raw community signal, and with simulated data where true community labels are known.
+Visualizes observed species frequencies per sample as stacked bars, the same layout as `eDNA_dmm_structure()`, allowing direct before/after comparison. Most useful before fitting to inspect the raw community signal, and with simulated data where true community labels are known.
 
 ```r
 p <- plot_true_compositions(
@@ -532,7 +484,7 @@ p <- plot_true_compositions(
   metadata        = my_metadata,
   sample_id_col   = "sample_id",
   facet_var       = "year",          # column facets
-  facet_row_var   = "depth_bin",     # row facets — see "Two-way layouts" below
+  facet_row_var   = "depth_bin",     # row facets: see "Two-way layouts" below
   sort_var        = "Depth",         # sort samples within each panel
   top_n           = 20,              # top N taxa individually; rest → "Other"
   taxa_include    = NULL,            # or a taxon vector from dmm_taxon_order()
@@ -548,22 +500,22 @@ p <- plot_true_compositions(
 
 Returns a `ggplot2` object, or a **cowplot grid object** when `facet_row_var` is supplied.
 
-#### Two-way layouts — `facet_row_var`
+#### Two-way layouts: `facet_row_var`
 
 `facet_var` makes panel *columns*; `facet_row_var` makes panel *rows*. With `facet_row_var` set, one sub-plot is built per row level and they are stacked with cowplot. That architecture exists for a reason: it is the only one that keeps panel widths proportional to sample count (via `space = "free_x"`), so a stratum with 30 samples is drawn three times wider than one with 10 instead of being stretched to match.
 
 This is the recommended layout for publication figures with two-way structure (e.g. depth stratum × year).
 
-#### Row labels — `row_label_fn`, `row_label_position`
+#### Row labels: `row_label_fn`, `row_label_position`
 
 | Parameter | Purpose |
 |---|---|
 | `row_label_fn` | Function applied to each `facet_row_var` level to build its display label. `function(x) paste0(x, " m")` for depth, `function(x) paste0("Year: ", x)` for year. Default `as.character`. |
-| `row_label_position` | `"title"` (bold label above each row's panel — **new default**) or `"ylab"` (as the y-axis label — the old, hardcoded behavior). |
+| `row_label_position` | `"title"` (bold label above each row's panel: **new default**) or `"ylab"` (as the y-axis label: the old, hardcoded behavior). |
 | `row_label_size` | Font size of that label. Default `NULL` = `base_size`. |
 | `panel_labels` | Label each row panel with a lowercase letter (a, b, c…). Default `TRUE`. Set `FALSE` when this plot is itself a panel inside a larger composite figure, where the outer figure supplies the letters and an inner set would collide. |
 
-`row_label_fn` is what makes the label text generalize across datasets — it is tied to whatever `facet_row_var` means for your data, rather than being hardcoded.
+`row_label_fn` is what makes the label text generalize across datasets; it is tied to whatever `facet_row_var` means for your data, rather than being hardcoded.
 
 #### Legend layout
 
@@ -582,7 +534,7 @@ Taxon legends get large fast; these control how the legend is laid out and how m
 > fraction of the stack, and any rows that do not fit are **clipped without warning**. If legend
 > entries go missing, raise `legend_rel_height` rather than assuming the taxa were dropped.
 
-Taxa are sorted and laid out hue block by hue block, so setting `legend_ncol = n_hues` puts roughly one color family per column — which is what makes a 20-taxon legend scannable.
+Taxa are sorted and laid out hue block by hue block, so setting `legend_ncol = n_hues` puts roughly one color family per column, which is what makes a 20-taxon legend scannable.
 
 #### Axis and strip sizing
 
@@ -593,36 +545,41 @@ Taxa are sorted and laid out hue block by hue block, so setting `legend_ncol = n
 | `ylab_rel_width` | Width of the label strip as a fraction of the stack. Default `0.03`. |
 | `strip_text_size` | Font size of the column-facet strip labels. Default `NULL` = `base_size`. |
 
-#### Reference lines — `vline_*`
+#### Reference lines: `vline_*`
 
-Draws a vertical reference line at a threshold in sample-ordering space — e.g. marking where depth crosses 200 m once samples are sorted by depth.
+Draws a vertical reference line at a threshold in sample-ordering space, e.g. marking where depth crosses 200 m once samples are sorted by depth.
 
 ```r
+data <- get_example_data()
+
 p <- plot_true_compositions(
-  counts, metadata = meta, sort_var = "Depth",
+  data$counts, metadata = data$metadata, sort_var = "Depth",
   vline_var       = "Depth",     # numeric column to locate the threshold in
-  vline_value     = 200,         # the threshold
+  vline_value     = 50,          # the threshold, in that column's units
   vline_color     = "black",
   vline_linetype  = "dashed",
   vline_linewidth = 0.7
 )
 ```
 
-#### Sharing a palette with the fitted plot — `taxa_include`
+#### Sharing a palette with the fitted plot: `taxa_include`
 
 ```r
+data <- get_example_data()
+fit  <- eDNA_dmm(data$counts, data$covariates, K = 4)
+
 taxa <- dmm_taxon_order(fit, top_n = 20)
-plot_true_compositions(counts, taxa_include = taxa)
+plot_true_compositions(data$counts, taxa_include = taxa)
 ```
 
-`taxa_include` names exactly which taxa to show individually; everything else is pooled into `"Other"`, and `top_n` is ignored. Names absent from `counts` are dropped with a warning. See [`dmm_taxon_order()`](#dmm_taxon_order--shared-taxon-ranking-for-matching-palettes) for why this matters.
+`taxa_include` names exactly which taxa to show individually; everything else is pooled into `"Other"`, and `top_n` is ignored. Names absent from `counts` are dropped with a warning. See [`dmm_taxon_order()`](#dmm_taxon_order-shared-taxon-ranking-for-matching-palettes) for why this matters.
 
 ---
 
 ---
-### `eDNA_dmm_compositions()` — Posterior community compositions
+### `eDNA_dmm_compositions()`: Posterior community compositions
 
-Visualizes the posterior mean taxonomic composition of each latent community as stacked bars — the model's estimate of what each community "looks like" in species space. Colors match those used in `eDNA_dmm_structure()` and `plot_true_compositions()` for direct comparison.
+Visualizes the posterior mean taxonomic composition of each latent community as stacked bars, the model's estimate of what each community "looks like" in species space. Colors match those used in `eDNA_dmm_structure()` and `plot_true_compositions()` for direct comparison.
 
 ```r
 p <- eDNA_dmm_compositions(
@@ -640,9 +597,9 @@ Returns a `ggplot2` object. The x-axis labels show community numbers (1, 2, 3…
 
 ---
 
-### `dmm_taxon_order()` — Shared taxon ranking (for matching palettes)
+### `dmm_taxon_order()`: Shared taxon ranking (for matching palettes)
 
-Returns taxa ranked by total posterior weight across communities (`colSums(pi_mean)`). A taxon that dominates a single community ranks highly even if it is rare overall — the ordering that matters when the question is what *distinguishes* communities.
+Returns taxa ranked by total posterior weight across communities (`colSums(pi_mean)`). A taxon that dominates a single community ranks highly even if it is rare overall, the ordering that matters when the question is what *distinguishes* communities.
 
 ```r
 taxa <- dmm_taxon_order(
@@ -654,9 +611,12 @@ taxa <- dmm_taxon_order(
 **Use this whenever two composition figures sit side by side.** The taxon palette is a deterministic function of the sorted taxon set: same set in, same colors out. If `eDNA_dmm_compositions()` picks its own top 20 and `plot_true_compositions()` independently picks its own, the two sets differ and shared taxa get *different colors in each panel*. Driving both from one ranking fixes that:
 
 ```r
+data <- get_example_data()
+fit  <- eDNA_dmm(data$counts, data$covariates, K = 4)
+
 taxa <- dmm_taxon_order(fit, top_n = 20)
 
-p_obs   <- plot_true_compositions(counts, taxa_include = taxa)   # observed
+p_obs   <- plot_true_compositions(data$counts, taxa_include = taxa)   # observed
 p_model <- eDNA_dmm_compositions(fit, top_n = 20)                # fitted
 
 cowplot::plot_grid(p_obs, p_model, ncol = 1)
@@ -667,7 +627,7 @@ Note this is deliberately **not** the same ranking as mean observed frequency ac
 ---
 
 
-### `get_example_data()` — Built-in example dataset
+### `get_example_data()`: Built-in example dataset
 
 A small, deliberately plain example: a site-by-taxon count table plus the two numeric covariates that separate the communities. 20 sites, 33 taxa, 4 true communities.
 
@@ -675,45 +635,45 @@ A small, deliberately plain example: a site-by-taxon count table plus the two nu
 data <- get_example_data()
 
 data$counts       # integer matrix, 20 sites × 33 taxa (rows = sites)
-data$covariates   # data frame, 20 × 2: Depth, Distance_shore — numeric only
+data$covariates   # data frame, 20 × 2: Depth, Distance_shore: numeric only
 data$metadata     # data frame, 20 × 4: sample_id, TrueCommunity, Depth, Distance_shore
 ```
 
-That's the whole object — three elements. It goes straight into the model with nothing to subset:
+That's the whole object, three elements. It goes straight into the model with nothing to subset:
 
 ```r
 fit <- eDNA_dmm(counts = data$counts, covariates = data$covariates, K = 4)
 eDNA_dmm_structure(fit, metadata = data$metadata, facet_var = "TrueCommunity")
 ```
 
-**Why `covariates` and `metadata` are separate.** `eDNA_dmm()` requires every covariate column to be numeric — it will try to fit whatever you hand it. So an identifier like `sample_id`, or a ground-truth label like `TrueCommunity`, cannot live in `covariates`. The plotting functions want exactly those labelling columns. Keeping the two apart means both calls work as written, with no subsetting.
+**Why `covariates` and `metadata` are separate.** `eDNA_dmm()` requires every covariate column to be numeric; it will try to fit whatever you hand it. So an identifier like `sample_id`, or a ground-truth label like `TrueCommunity`, cannot live in `covariates`. The plotting functions want exactly those labelling columns. Keeping the two apart means both calls work as written, with no subsetting.
 
-> **Why 33 taxa and not 40?** The simulation draws 40 species, but taxa with zero reads across every sample are dropped from `counts` — they carry no information and the model rejects all-zero columns.
+> **Why 33 taxa and not 40?** The simulation draws 40 species, but taxa with zero reads across every sample are dropped from `counts`; they carry no information and the model rejects all-zero columns.
 
 The simulation's internal tables (contributor lists, per-organism shedding, raw long-format reads) are **not** shipped. They are an implementation detail of `simulate_eDNA_survey()`, not an example of what eDNA data look like. Call [`simulate_eDNA_survey()`](#simulation-pipeline) directly if you want them.
 
 ---
 
-### `get_example_replicates()` — Built-in replicated example
+### `get_example_replicates()`: Built-in replicated example
 
-The same survey with three bottle replicates per site, so the expected shape of replicated data is visible without simulating it.
+The same survey with three replicates per site, so the expected shape of replicated data is visible without simulating it.
 
 ```r
 r <- get_example_replicates()
 
 r$counts      # integer matrix, 60 replicates × 33 taxa
               #   rownames: STN_001_B1, STN_001_B2, STN_001_B3, STN_002_B1, ...
-r$station_id  # character, length 60 — which site each row came from
-r$covariates  # data frame, 20 × 2 — station-level, one row per site
-r$metadata    # data frame, 20 × 4 — station-level labelling columns
+r$replication  # character, length 60: which site each row came from
+r$covariates  # data frame, 20 × 2: station-level, one row per site
+r$metadata    # data frame, 20 × 4: station-level labelling columns
 ```
 
-The only structural difference from `get_example_data()`: `counts` has one row per **replicate**, and `station_id` says which rows belong together. Covariates stay **station-level** — 20 rows, not 60.
+The only structural difference from `get_example_data()`: `counts` has one row per **replicate**, and `replication` says which rows belong together. Covariates stay **station-level**, 20 rows, not 60.
 
 ```r
 fit <- eDNA_dmm(
   counts     = r$counts,
-  station_id = r$station_id,
+  replication = r$replication,
   covariates = r$covariates,
   K          = 4
 )
@@ -722,15 +682,15 @@ fit$theta_mean   # [20 stations × 33 taxa] posterior mean station compositions
 fit$phi_mean     # replicate reproducibility
 ```
 
-See [Replicated samples](#replicated-samples--station_id) for why you should not sum replicates before fitting.
+See [Replicated samples](#replicated-samples-replication) for why you should not sum replicates before fitting.
 
 ---
 
 
-### `eDNA_clear_stan_cache()` — Reset the compiled model cache
+### `eDNA_clear_stan_cache()`: Reset the compiled model cache
 
 The Stan model is compiled once on first use and cached per machine under
-`tools::R_user_dir("eDNAstructure", "cache")`. Clear it to force a fresh compile —
+`tools::R_user_dir("eDNAstructure", "cache")`. Clear it to force a fresh compile, 
 useful after upgrading `rstan` or `StanHeaders`, which can leave the cached object
 mismatched with the new toolchain.
 
@@ -764,8 +724,8 @@ sim <- simulate_eDNA_survey(
   decay_rate                = 0.1,         # exponential distance decay of eDNA signal
   seed                      = 42
 )
-# sim$counts      — ready for eDNA_dmm()
-# sim$covariates  — ready for eDNA_dmm()
+# sim$counts: ready for eDNA_dmm()
+# sim$covariates: ready for eDNA_dmm()
 ```
 
 Or run each step individually for full control:
@@ -807,7 +767,7 @@ metab_df <- simulate_metabarcoding(
   mean_read_depth = 10000,   # mean total reads per sample
   read_depth_sd   = 0.2,     # lognormal SD for read depth variation
   error_sd        = 0.05,    # Gaussian noise added to species frequencies
-  rep             = 1        # sequencing technical replicates per bottle
+  rep             = 1        # sequencing technical replicates per sample
 )
 
 sample_metadata <- generate_sample_covariates(
@@ -855,9 +815,9 @@ Increase `adapt_delta` toward `0.99`. If they persist, try lower K or verify you
 Yes. The model treats each column as a compositional unit and does not use taxonomy. ASVs give finer resolution; taxa collapse dimensionality and often converge faster.
 
 **How do I include year as a covariate?**
-Pass it as a numeric column. But if you have only a few discrete years, the linearity assumption may be too strong — consider fitting without year and testing it post-hoc via multinomial regression on the posterior assignments.
+Pass it as a numeric column. But if you have only a few discrete years, the linearity assumption may be too strong, consider fitting without year and testing it post-hoc via multinomial regression on the posterior assignments.
 
-**The first run takes forever — is something wrong?**
+**The first run takes forever, is something wrong?**
 No. Stan compiles the model to C++ on the first call after installation (1–2 minutes). All subsequent calls skip compilation. This is normal behavior for any rstan-based package.
 
 ---

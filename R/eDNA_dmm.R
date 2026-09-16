@@ -1,5 +1,5 @@
 # =============================================================================
-# eDNA_dmm() — Fit a Dirichlet-Multinomial Mixture model
+# eDNA_dmm(): Fit a Dirichlet-Multinomial Mixture model
 # =============================================================================
 
 #' Fit a Dirichlet-Multinomial Mixture model to eDNA count data
@@ -18,7 +18,7 @@
 #' @section Input format:
 #' `counts` should be a **sample × taxon** matrix of non-negative integer read
 #' counts. Rows are samples (stations, replicates, etc.) and columns are taxa
-#' (or ASVs — the model does not require taxonomic annotation). Row names
+#' (or ASVs, the model does not require taxonomic annotation). Row names
 #' are used as sample identifiers in plots; column names are used as taxon
 #' labels.
 #'
@@ -42,8 +42,8 @@
 #' Typical eDNA data have `alpha` in the range 1–5.
 #'
 #' @section Replicated samples:
-#' If a station was sequenced more than once (PCR or bottle replicates), pass
-#' each replicate as its own row of `counts` and use `station_id` to say which
+#' If a station was sequenced more than once (PCR or sampling replicates), pass
+#' each replicate as its own row of `counts` and use `replication` to say which
 #' rows belong together. This switches to a hierarchical model that estimates
 #' each station's own composition:
 #'
@@ -56,27 +56,27 @@
 #' station compositions are returned as `theta_mean`.
 #'
 #' **Why not just sum the replicates?** Summing would be lossless if replicates
-#' were plain multinomial draws from the station's composition — their sum is a
+#' were plain multinomial draws from the station's composition, their sum is a
 #' sufficient statistic, and the summed model is exactly what you get. Replicates
 #' are informative precisely because they are *overdispersed* relative to
 #' multinomial (PCR jackpotting, uneven template). Replicate concordance versus
 #' scatter is the signal, and summing discards it.
 #'
 #' Replication may be ragged: stations can have different numbers of replicates,
-#' and stations with a single replicate are fully supported — their `theta_i` is
+#' and stations with a single replicate are fully supported, their `theta_i` is
 #' informed by that replicate plus shrinkage toward `alpha * pi_k`, using a `phi`
 #' learned from the replicated stations. If *no* station has more than one
 #' replicate, `alpha` and `phi` are not separately identified, so `eDNA_dmm()`
 #' simply uses the standard model instead and says so.
 #'
 #' `covariates` remain **station-level**: supply either one row per station (in
-#' order of first appearance in `station_id`) or one row per row of `counts`, in
+#' order of first appearance in `replication`) or one row per row of `counts`, in
 #' which case they are collapsed automatically. A covariate that varies between
 #' replicates of the same station is an error, since the model has no
 #' replicate-level covariate term.
 #'
 #' Note that [eDNA_loo()] deliberately stays on the standard summed model for
-#' K selection — see its documentation.
+#' K selection. See its documentation.
 #'
 #' @section Single-chain recommendation:
 #' By default, `eDNA_dmm()` fits a **single MCMC chain** (`chains = 1`).
@@ -104,12 +104,12 @@
 #'   \item{`replicate`}{Logical: whether the replicate-aware model was used.}
 #'   \item{`theta_mean`}{Matrix `N × S` of posterior mean **station**
 #'     compositions, or `NULL` when the standard model was used. Only available
-#'     from the replicate model — the summed model has no station-level
+#'     from the replicate model, the summed model has no station-level
 #'     composition parameter.}
 #'   \item{`phi_mean`}{Scalar: posterior mean replicate-level dispersion, or
 #'     `NULL` when the standard model was used.}
 #'   \item{`K`}{Number of communities fitted.}
-#'   \item{`N`}{Number of samples — stations, when the replicate model is used.}
+#'   \item{`N`}{Number of samples, stations, when the replicate model is used.}
 #'   \item{`R`}{Number of replicate rows (equals `N` for the standard model).}
 #'   \item{`S`}{Number of taxa.}
 #'   \item{`taxa_names`}{Character vector of taxon names (column names of `counts`).}
@@ -131,10 +131,10 @@
 #' @param K A single positive integer ≥ 2: the number of latent communities.
 #'   If you are unsure, start with `K = 2` and increase. The function
 #'   [eDNA_loo()] can help compare models across values of K.
-#' @param station_id Optional vector of station labels, one per **row** of
+#' @param replication Optional vector of station labels, one per **row** of
 #'   `counts`, identifying which rows are replicates of the same station. Rows
 #'   sharing a label are treated as replicates. Leave as `NULL` (the default)
-#'   when each row of `counts` is an independent sample — this is the standard,
+#'   when each row of `counts` is an independent sample; this is the standard,
 #'   fully identified model and the right choice for unreplicated data. See the
 #'   **Replicated samples** section.
 #' @param scale_covariates Logical. If `TRUE` (the default), covariates are
@@ -167,9 +167,9 @@
 #'   Set a fixed seed for reproducibility across runs.
 #' @param conc A positive number: the Dirichlet concentration parameter for
 #'   the prior on community compositions (`pi`). Default is `0.5`.
-#'   - `conc < 1` (e.g., 0.5): sparse compositions — each community is
+#'   - `conc < 1` (e.g., 0.5): sparse compositions, in which each community is
 #'     dominated by a few taxa. Usually appropriate for eDNA data.
-#'   - `conc = 1`: flat (symmetric Dirichlet) prior — all compositions
+#'   - `conc = 1`: flat (symmetric Dirichlet) prior, under which all compositions
 #'     equally likely. Uninformative.
 #'   - `conc > 1`: concentrates compositions toward uniform. Use only
 #'     if you expect all taxa to be equally abundant in each community.
@@ -182,12 +182,12 @@
 #'   = 2.5. Adjust if you have strong prior information about overdispersion.
 #' @param phi_shape A positive number: shape of the Gamma prior on the
 #'   replicate-level dispersion `phi`. Default is `2`. Only used when
-#'   `station_id` is supplied.
+#'   `replication` is supplied.
 #' @param phi_rate A positive number: rate of the Gamma prior on `phi`.
-#'   Default is `0.02`, giving a diffuse prior with mean 100 — deliberately much
+#'   Default is `0.02`, giving a diffuse prior with mean 100, deliberately much
 #'   larger than the prior mean for `alpha`, because replicates of one station
 #'   are usually far more similar to each other than different stations are.
-#'   Only used when `station_id` is supplied.
+#'   Only used when `replication` is supplied.
 #' @param verbose Logical. If `TRUE` (the default), print Stan compilation and
 #'   sampling progress. Set to `FALSE` for silent fitting (useful in loops
 #'   over multiple K values).
@@ -225,11 +225,11 @@
 #'   K          = 2
 #' )
 #'
-#' # Replicated data: each row of `counts` is one replicate, and `station_id`
+#' # Replicated data: each row of `counts` is one replicate, and `replication`
 #' # says which rows belong to the same station. Covariates stay station-level.
 #' fit_rep <- eDNA_dmm(
 #'   counts     = replicate_counts,
-#'   station_id = replicate_meta$station,
+#'   replication = replicate_meta$station,
 #'   covariates = station_covariates,
 #'   K          = 2
 #' )
@@ -242,7 +242,7 @@ eDNA_dmm <- function(
     counts,
     covariates      = NULL,
     K               = 2,
-    station_id      = NULL,
+    replication      = NULL,
     scale_covariates = TRUE,
     chains          = 1,
     iter            = 4000,
@@ -264,15 +264,15 @@ eDNA_dmm <- function(
 
   # ── Replicate structure (optional) ──────────────────────────────────────────
   station <- NULL
-  if (!is.null(station_id)) {
-    station <- validate_station_id(station_id, counts)
+  if (!is.null(replication)) {
+    station <- validate_replication(replication, counts)
 
     if (isTRUE(station$fallback)) {
       # No station has more than one replicate. alpha and phi would not be
       # separately identified, and the replicate model buys nothing here: with
       # one replicate per station the standard model IS the correct model.
       if (verbose) {
-        message("Every station in `station_id` has exactly 1 replicate.")
+        message("Every station in `replication` has exactly 1 replicate.")
         message("Using the standard model, which is the correct model for unreplicated data.")
       }
       # Keep the station labels as sample IDs if the matrix has none.
@@ -502,7 +502,7 @@ eDNA_dmm <- function(
       replicate       = replicate_model,
       theta_mean      = theta_mean,
       phi_mean        = phi_mean,
-      station_id      = if (replicate_model) station$levels[station$index] else NULL,
+      replication      = if (replicate_model) station$levels[station$index] else NULL,
       station_levels  = if (replicate_model) station$levels else NULL,
       reps_per_station = if (replicate_model) station$reps else NULL,
       K               = K,
