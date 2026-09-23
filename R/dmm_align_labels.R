@@ -42,7 +42,11 @@
 #'
 #' When these two say the chains are in different modes, a high `pi` Rhat is
 #' real and no amount of relabelling will lower it. The usual cause is a K the
-#' data do not identify, and the fix is a smaller K, not a longer run.
+#' data do not identify, and the fix is a different K, not a longer run. That
+#' cuts both ways: K too large invites the classic overfit failure, but K too
+#' small forces genuinely distinct communities to merge, which is itself
+#' ambiguous about which samples go together and fails the same way. Compare
+#' a range of K (e.g. [eDNA_loo()]) rather than assuming the fix is smaller.
 #'
 #' @param fit An `edna_dmm_fit` from [eDNA_dmm()], with
 #'   any number of chains.

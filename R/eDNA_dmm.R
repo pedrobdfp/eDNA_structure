@@ -264,7 +264,7 @@ eDNA_dmm <- function(
         invokeRestart("muffleWarning")
     })
 
-  if (verbose) rstan::check_hmc_diagnostics(stan_fit)
+  if (verbose) .print_hmc_diagnostics(stan_fit)
 
   # ── Assemble the fit ────────────────────────────────────────────────────────
   # Community-indexed values here are provisional: they are computed before
@@ -314,10 +314,16 @@ eDNA_dmm <- function(
   bad <- dg$rhat > rhat_threshold | dg$ess < ess_threshold
   if (any(bad)) {
     warning(sprintf(
-      paste0("Convergence problems remain after label alignment (%s). ",
+      paste0("K = %d: convergence problems remain after label alignment (%s). ",
              "This is not label switching: either the chains have found ",
-             "different partitions of the samples, or a chain has failed. ",
-             "Inspect fit$alignment$diagnostics, and consider a smaller K."),
+             "different partitions of the samples, or a chain has failed. This ",
+             "can happen with K too large for the data to support, but just as ",
+             "often with K too small, forcing genuinely distinct communities ",
+             "to be merged, which is itself ambiguous about which samples go ",
+             "together. Inspect fit$alignment$diagnostics, and try other values ",
+             "of K (both directions) rather than assuming smaller is the fix; ",
+             "eDNA_loo() and eDNA_dmm_k_diagnostics() compare a range at once."),
+      K,
       paste(sprintf("%s Rhat %.3f, ESS %.0f", dg$quantity[bad],
                     dg$rhat[bad], dg$ess[bad]), collapse = "; ")),
       call. = FALSE)
@@ -327,6 +333,62 @@ eDNA_dmm <- function(
   }
 
   fit
+}
+
+
+# =============================================================================
+# HMC diagnostics, printed without depending on rstan's message()-based output
+# =============================================================================
+
+#' Print HMC diagnostics without relying on rstan's own message()-based output
+#'
+#' @description
+#' `rstan::check_hmc_diagnostics()` prints its header lines ("Divergences:",
+#' "Tree depth:", "Energy:") with `cat()`, but the actual counts on each
+#' ("0 of 4000 iterations...") with `message()`. Those go to a different
+#' stream (the R condition system, not stdout), and are silently dropped by
+#' some consoles/terminals/IDE integrations that do show `cat()`/`print()`
+#' output, which produces exactly this: three headers with nothing under any
+#' of them. Every other line this package prints (print/summary output) is
+#' `cat()`-based and visible everywhere, so this rebuilds the same three
+#' checks the same way, using rstan's own (exported) accessors for the
+#' underlying numbers.
+#'
+#' @param stan_fit An `rstan::stanfit` object.
+#' @return Invisibly `NULL`, called for its printed side effect.
+#' @keywords internal
+.print_hmc_diagnostics <- function(stan_fit) {
+  div  <- rstan::get_divergent_iterations(stan_fit)
+  td   <- rstan::get_max_treedepth_iterations(stan_fit)
+  bfmi <- rstan::get_bfmi(stan_fit)
+  n_div <- sum(div); n_td <- sum(td); N <- length(div)
+
+  # Same fallback rstan's own (unexported) get_treedepth_threshold() uses.
+  max_depth <- stan_fit@stan_args[[1]]$control$max_treedepth
+  if (is.null(max_depth)) max_depth <- 10
+
+  cat("\nDivergences:\n")
+  cat(sprintf("%d of %d iterations ended with a divergence%s.\n",
+              n_div, N,
+              if (n_div > 0) sprintf(" (%.1f%%)", 100 * n_div / N) else ""))
+  if (n_div > 0) cat("Try increasing 'adapt_delta' to remove the divergences.\n")
+
+  cat("\nTree depth:\n")
+  cat(sprintf("%d of %d iterations saturated the maximum tree depth of %d%s.\n",
+              n_td, N, max_depth,
+              if (n_td > 0) sprintf(" (%.1f%%)", 100 * n_td / N) else ""))
+  if (n_td > 0) cat("Try increasing 'max_treedepth' to avoid saturation.\n")
+
+  cat("\nEnergy:\n")
+  bad_bfmi <- which(bfmi < 0.2)
+  if (length(bad_bfmi) == 0) {
+    cat("E-BFMI indicated no pathological behavior.\n")
+  } else {
+    cat("E-BFMI indicated possible pathological behavior:\n")
+    for (ch in bad_bfmi) cat(sprintf("  Chain %d: E-BFMI = %.3f\n", ch, bfmi[ch]))
+    cat("E-BFMI below 0.2 indicates you may need to reparameterize your model.\n")
+  }
+  invisible(NULL)
 }
 
 
@@ -442,7 +504,7 @@ summary.edna_dmm_fit <- function(object, ...) {
   }
 
   cat("HMC diagnostics:\n")
-  rstan::check_hmc_diagnostics(object$stan_fit)
+  .print_hmc_diagnostics(object$stan_fit)
 
   invisible(object)
 }

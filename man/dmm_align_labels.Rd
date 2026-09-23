@@ -74,7 +74,11 @@ in the matrix means several modes, each found by some of the chains.
 
 When these two say the chains are in different modes, a high \code{pi} Rhat is
 real and no amount of relabelling will lower it. The usual cause is a K the
-data do not identify, and the fix is a smaller K, not a longer run.
+data do not identify, and the fix is a different K, not a longer run. That
+cuts both ways: K too large invites the classic overfit failure, but K too
+small forces genuinely distinct communities to merge, which is itself
+ambiguous about which samples go together and fails the same way. Compare
+a range of K (e.g. \code{\link[=eDNA_loo]{eDNA_loo()}}) rather than assuming the fix is smaller.
 }
 
 \examples{

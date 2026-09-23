@@ -21,10 +21,14 @@ eDNA_dmm_k_diagnostics(
 )
 }
 \arguments{
-\item{fits}{A named list of \code{edna_dmm_fit} objects, or a function taking a
-single integer K and returning a fit (useful when fits are cached on disk
-and you would rather not hold them all in memory at once). Only needed for
-panels (e) and (f); pass \code{NULL} with \code{level = "simple"}.}
+\item{fits}{The return value of \code{\link[=eDNA_loo]{eDNA_loo()}} itself, the easiest way to
+call this function: \code{elpd_by_run}, \code{convergence}, and \code{fits} proper are
+all pulled out of it automatically (anything you pass explicitly for
+those still wins). Otherwise, a named list of \code{edna_dmm_fit} objects, or
+a function taking a single integer K and returning a fit (useful when
+fits are cached on disk and you would rather not hold them all in memory
+at once). The fit list itself is only needed for panels (e) and (f); pass
+\code{NULL} with \code{level = "simple"}.}
 
 \item{K_values}{Integer vector of K to include. Required when \code{fits} is a
 function or \code{NULL}; inferred from \code{fits} otherwise.}
@@ -160,11 +164,15 @@ buying predictive accuracy at the cost of everything else.
 
 \examples{
 \dontrun{
-# The two predictive panels, from a table of runs alone
+# The easy way: hand it eDNA_loo()'s return value directly
+res <- eDNA_loo(counts, covariates, K_range = 2:6)
+eDNA_dmm_k_diagnostics(res)$plot
+
+# The two predictive panels only, from a table of runs alone
 eDNA_dmm_k_diagnostics(NULL, K_values = 2:10, level = "simple",
                        elpd_by_run = runs)$plot
 
-# Everything, from fits cached on disk
+# Everything, from fits cached on disk instead of held in memory
 d <- eDNA_dmm_k_diagnostics(
   fits        = function(k) readRDS(sprintf("fits/fit_K\%d.rds", k)),
   K_values    = 2:10,

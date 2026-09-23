@@ -111,11 +111,11 @@ loo_result <- eDNA_loo(data$counts, data$covariates, K_range = 2:5)
 loo_result$plot        # ELPD against K, unfilled where chains disagreed
 
 # eDNA_dmm_k_diagnostics() is the fuller picture behind that one elbow plot:
-diagnostics <- eDNA_dmm_k_diagnostics(
-  loo_result$fits, K_values = 2:5,
-  elpd_by_run = loo_result$loo_by_chain,
-  convergence = loo_result$loo_table
-)
+# six panels (predictive fit, marginal gain, reliability, convergence,
+# assignment certainty, community distinctness) that fail in different ways,
+# so K is rarely ambiguous once you see them together. Feed it loo_result
+# straight, it pulls out everything it needs on its own.
+diagnostics <- eDNA_dmm_k_diagnostics(loo_result)
 diagnostics$plot
 
 # Predictive fit and identifiability are separate questions:
@@ -552,12 +552,30 @@ on purpose, so K is rarely ambiguous once you see all of them together. No
 single panel picks K; the point is that they usually agree.
 
 ```r
+# The easy way: hand it eDNA_loo()'s return value directly. fits, elpd_by_run
+# and convergence are all pulled out of it automatically.
+diagnostics <- eDNA_dmm_k_diagnostics(loo_result)
+
+diagnostics$plot     # the assembled 6-panel figure
+diagnostics$panels   # panels (a) to (f) individually, for custom layouts
+diagnostics$table    # one row per K: elpd_mean/sd, pct_pareto_bad, min_agreement, lp_rhat,
+                      # min_distance, mean/median/q10_certainty, mean_excess, pct_confident
+```
+
+The full argument list, for anything more custom (e.g. fits cached on disk
+rather than held in memory, or a manual `K_values` subset):
+
+```r
 diagnostics <- eDNA_dmm_k_diagnostics(
-  fits        = loo_result$fits,        # named list of edna_dmm_fit, or a function(k) for on-disk fits
-  K_values    = 2:5,
+  fits        = loo_result,             # or a plain named list of edna_dmm_fit,
+                                        # or a function(k) for on-disk fits
+  K_values    = 2:5,                    # required unless `fits` names them (K2, K3, ...)
   level       = "advanced",             # "advanced" (default, 6 panels) or "simple" (2 panels)
-  elpd_by_run = loo_result$loo_by_chain, # per-chain ELPD, straight from eDNA_loo()
-  convergence = loo_result$loo_table,   # lp_rhat / min_agreement, straight from eDNA_loo()
+  elpd_by_run = NULL,                   # per-chain ELPD; overrides what `fits` would supply
+  adjacent    = NULL,                   # paired K-to-K+1 gain + SE for panel (b); auto-computed
+                                        # from `fits` when it's a real list, not a function
+  pareto_by_run = NULL,                 # panel (c) inputs; auto-built from elpd_by_run + convergence
+  convergence = NULL,                   # lp_rhat / min_agreement; overrides what `fits` would supply
 
   pareto_threshold    = 0.7,  # Pareto k above which a sample's LOO contribution is unreliable
   rhat_threshold       = 1.1, # lp__ Rhat above which a K is flagged unconverged
@@ -566,11 +584,6 @@ diagnostics <- eDNA_dmm_k_diagnostics(
   distance             = "aitchison", # or "tv"; distance between community compositions
   base_size            = 12
 )
-
-diagnostics$plot     # the assembled 6-panel figure
-diagnostics$panels   # panels (a) to (f) individually, for custom layouts
-diagnostics$table    # one row per K: elpd_mean/sd, pct_pareto_bad, min_agreement, lp_rhat,
-                      # min_distance, mean/median/q10_certainty, mean_excess, pct_confident
 ```
 
 **The panels, left to right, top to bottom:**
@@ -911,7 +924,12 @@ Check `fit$alignment$min_agreement`, the share of samples the two least
 similar chains place in the same community, and `fit$alignment$lp_rhat`, which
 is invariant to labelling. Both near one means one solution found repeatedly.
 If either departs clearly, the chains found genuinely different groupings and
-relabelling cannot reconcile them; try a smaller `K`.
+relabelling cannot reconcile them; try other values of `K`. This cuts both
+ways, it's not only a "K too large" symptom: K too small forces genuinely
+distinct communities to merge, which is itself ambiguous about which samples
+belong together and fails the same way. `eDNA_loo()` and
+`eDNA_dmm_k_diagnostics()` compare a range of K at once rather than guessing
+a direction.
 
 **I have divergent transitions. What do I do?**
 Increase `adapt_delta` toward `0.99`. If they persist, try lower K or verify your count matrix has no all-zero rows or columns.

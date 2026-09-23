@@ -73,10 +73,14 @@
 #' deteriorate while (a) is still rising, and when they do, the higher K is
 #' buying predictive accuracy at the cost of everything else.
 #'
-#' @param fits A named list of `edna_dmm_fit` objects, or a function taking a
-#'   single integer K and returning a fit (useful when fits are cached on disk
-#'   and you would rather not hold them all in memory at once). Only needed for
-#'   panels (e) and (f); pass `NULL` with `level = "simple"`.
+#' @param fits The return value of [eDNA_loo()] itself, the easiest way to
+#'   call this function: `elpd_by_run`, `convergence`, and `fits` proper are
+#'   all pulled out of it automatically (anything you pass explicitly for
+#'   those still wins). Otherwise, a named list of `edna_dmm_fit` objects, or
+#'   a function taking a single integer K and returning a fit (useful when
+#'   fits are cached on disk and you would rather not hold them all in memory
+#'   at once). The fit list itself is only needed for panels (e) and (f); pass
+#'   `NULL` with `level = "simple"`.
 #' @param K_values Integer vector of K to include. Required when `fits` is a
 #'   function or `NULL`; inferred from `fits` otherwise.
 #' @param level `"advanced"` (default) draws six panels; `"simple"` draws the
@@ -133,11 +137,15 @@
 #'
 #' @examples
 #' \dontrun{
-#' # The two predictive panels, from a table of runs alone
+#' # The easy way: hand it eDNA_loo()'s return value directly
+#' res <- eDNA_loo(counts, covariates, K_range = 2:6)
+#' eDNA_dmm_k_diagnostics(res)$plot
+#'
+#' # The two predictive panels only, from a table of runs alone
 #' eDNA_dmm_k_diagnostics(NULL, K_values = 2:10, level = "simple",
 #'                        elpd_by_run = runs)$plot
 #'
-#' # Everything, from fits cached on disk
+#' # Everything, from fits cached on disk instead of held in memory
 #' d <- eDNA_dmm_k_diagnostics(
 #'   fits        = function(k) readRDS(sprintf("fits/fit_K%d.rds", k)),
 #'   K_values    = 2:10,
@@ -165,6 +173,21 @@ eDNA_dmm_k_diagnostics <- function(
   level    <- match.arg(level)
   distance <- match.arg(distance)
   advanced <- level == "advanced"
+
+  # Accept eDNA_loo()'s return value directly as `fits`, so
+  # eDNA_dmm_k_diagnostics(loo_result) is enough on its own. Detected by the
+  # specific combination eDNA_loo() actually returns (a $fits list alongside
+  # $loo_table and $loo_by_chain, and no $stan_fit at the top level, which
+  # rules out someone having passed a single edna_dmm_fit by mistake).
+  # Anything explicitly passed for elpd_by_run/convergence still wins, so this
+  # never overrides a caller who wants to supply their own.
+  if (is.list(fits) && !is.function(fits) && is.null(fits$stan_fit) &&
+      !is.null(fits$fits) && !is.null(fits$loo_table)) {
+    loo_result <- fits
+    if (is.null(elpd_by_run)) elpd_by_run <- loo_result$loo_by_chain
+    if (is.null(convergence)) convergence <- loo_result$loo_table
+    fits <- loo_result$fits
+  }
 
   # eDNA_loo()'s `fits`, the documented source for this argument, names its
   # elements "K2", "K3", ... (see eDNA_loo()'s return value). Try that

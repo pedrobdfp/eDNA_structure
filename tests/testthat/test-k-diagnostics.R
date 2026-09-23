@@ -57,6 +57,32 @@ test_that("K_values inferred from a K-prefixed fits list matches the K it names"
   expect_setequal(d$table$K, c(2, 5))
 })
 
+test_that("a full eDNA_loo()-shaped result unpacks automatically from `fits` alone", {
+  loo_result <- list(
+    fits         = list(K2 = fake_fit(2), K3 = fake_fit(3)),
+    loo_table    = data.frame(K = 2:3, n_obs = c(20, 20), lp_rhat = c(1.0, 1.0)),
+    loo_by_chain = data.frame(K = rep(2:3, each = 2), chain = rep(1:2, 2),
+                              elpd = rnorm(4, -100, 1))
+  )
+
+  manual <- eDNA_dmm_k_diagnostics(
+    fits        = loo_result$fits,
+    elpd_by_run = loo_result$loo_by_chain,
+    convergence = loo_result$loo_table
+  )
+  auto <- eDNA_dmm_k_diagnostics(loo_result)
+
+  expect_identical(auto$table, manual$table)
+
+  # An explicit elpd_by_run/convergence still wins over the ones inside
+  # `fits`, rather than being silently overridden.
+  override <- eDNA_dmm_k_diagnostics(
+    loo_result,
+    elpd_by_run = data.frame(K = 2:3, elpd = c(-1, -2))
+  )
+  expect_equal(nrow(override$table), 2)
+})
+
 test_that("panel (c) auto-builds from elpd_by_run$pareto_bad + convergence$n_obs", {
   fits <- list(K2 = fake_fit(2), K3 = fake_fit(3))
   elpd_by_run <- data.frame(

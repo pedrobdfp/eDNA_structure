@@ -352,11 +352,18 @@ fit4 <- eDNA_dmm(
   covariates = cov_matrix,
   K          = 4,       # number of latent communities
   chains     = 4,       # labels are aligned automatically
-  iter       = 10000,   # total MCMC iterations per chain
-  warmup     = 5000,    # warmup iterations discarded (should be ~half of iter)
+  iter       = 4000,    # total MCMC iterations per chain (eDNA_dmm()'s own default)
+  warmup     = 2000,    # warmup iterations discarded (should be ~half of iter)
   seed       = 13
 )
 ```
+
+4000 total iterations (2000 post-warmup per chain, 8000 pooled across 4
+chains) is already generous for a dataset this size, on well-separated
+ground truth like this one you should see ESS in the thousands, far past the
+`> 400` "trustworthy" bar. Reach for more only if `summary()` actually reports
+low ESS on a real dataset (see `vignette("eDNA_structure")`'s
+*Increasing iterations for better ESS* section).
 
 When running, Stan prints sampling progress to the console. A large block of
 C++ template warnings from Eigen/Stan headers may appear; these are benign
@@ -441,8 +448,8 @@ loo_result <- eDNA_loo(
   counts     = counts,
   covariates = cov_matrix,
   K_range    = 2:5,
-  iter       = 10000,
-  warmup     = 5000,
+  iter       = 4000,   # eDNA_loo()'s own default; this sweep fits 4 models,
+  warmup     = 2000,   # so the per-fit cost from a higher iter multiplies fast
   seed       = 13
 )
 ```
@@ -492,13 +499,9 @@ side, that fail in different ways on purpose. No single panel picks K; the
 point is that together they usually make the choice obvious.
 
 ```{r k_diagnostics}
-k_diag <- eDNA_dmm_k_diagnostics(
-  fits        = loo_result$fits,        # named list of edna_dmm_fit, one per K
-  K_values    = 2:5,
-  level       = "advanced",             # "advanced" (default, 6 panels) or "simple" (2 panels)
-  elpd_by_run = loo_result$loo_by_chain, # per-chain ELPD, straight from eDNA_loo()
-  convergence = loo_result$loo_table    # lp_rhat / min_agreement, straight from eDNA_loo()
-)
+# Hand it loo_result directly: fits, elpd_by_run and convergence are all
+# pulled out of it automatically.
+k_diag <- eDNA_dmm_k_diagnostics(loo_result)
 
 k_diag$plot     # the assembled figure
 k_diag$table    # one row per K, every panel's numbers in one place
