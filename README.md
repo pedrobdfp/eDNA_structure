@@ -89,7 +89,7 @@ print(fit)
 summary(fit)
 
 # Plot the results
-# First the structure plot. Its default is to plot the exact same way as plot_true_compositions() for easy comparison.
+# First the structure plot. Its default is to plot the exact same way as plot_true_compositions()
 # Note that the community labels are arbitrary
 eDNA_dmm_structure(fit, metadata = data$metadata,
                    facet_var = "TrueCommunity", sort_var = "Depth")			   
@@ -102,16 +102,15 @@ eDNA_dmm_beta_intervals(fit)$plot  # covariate effects, with credible intervals
 
 In the example dataset, the true number of communities we have simulated is k=4. However, this will be unknown for any real dataset. So, the first step in inference is figuring out how many communities there are.
 ```r
-# This function will call eDNA_dmm() and fit the data with several different Ks, and then compare the fits with LOO.
+# This function will call eDNA_dmm() and fit the data with several different Ks,
+# and then compare the fits with LOO.
 # This is computationally demanding and may take several minutes
 loo_result <- eDNA_loo(data$counts, data$covariates, K_range = 2:5)
-# You will see some warnings associated with k=3 and k=5. This may happen when K is blatantly incorrect, which may cause the model to not converge.
+# You will see some warnings associated with k=3 and k=5. 
+# This may happen when K is blatantly incorrect, which may cause the model to not converge.
 loo_result$plot        # ELPD against K, unfilled where chains disagreed
 
 # eDNA_dmm_k_diagnostics() is the fuller picture behind that one elbow plot:
-# six panels (predictive fit, marginal gain, reliability, convergence,
-# assignment certainty, community distinctness) that fail in different ways,
-# so K is rarely ambiguous once you see them together.
 diagnostics <- eDNA_dmm_k_diagnostics(
   loo_result$fits, K_values = 2:5,
   elpd_by_run = loo_result$loo_by_chain,
@@ -125,35 +124,9 @@ loo_result$loo_table[, c("K", "elpd", "lp_rhat", "min_agreement", "identified")]
 # All fitted models are stored: no need to refit
 # So when you decide K=4 is the correct one, you don't have to run eDNA_dmm() again for that. 
 fit <- loo_result$fits[["K4"]]
+
+# From here, you can do all your downstream visualizations and analyses! 
 ```
-
-
-### Simulating your own data
-
-`simulate_eDNA_survey()` generates surveys with known ground truth, for method validation or teaching. It returns `counts`, `covariates` and `metadata` with **exactly the same meaning** as `get_example_data()`, so everything above works unchanged; only the first line differs:
-
-```r
-# Option A: the built-in example
-data <- get_example_data()
-
-# Option B: simulate one with known ground truth
-data <- simulate_eDNA_survey(
-  n_communities         = 4,
-  n_species             = 40,
-  samples_per_community = 5,
-  seed                  = 2026
-)
-
-# ...and from here the code is identical for either option
-plot_true_compositions(data$counts, metadata = data$metadata,
-                       facet_var = "TrueCommunity")
-
-fit <- eDNA_dmm(counts = data$counts, covariates = data$covariates, K = 4)
-
-eDNA_dmm_structure(fit, metadata = data$metadata, facet_var = "TrueCommunity")
-```
-
-Option B additionally returns the ground truth needed to check parameter recovery, `community_compositions`, `metab_df`, `sample_metadata` and `contributors`. Those are extras; the three fields above behave identically either way.
 
 > **For a complete walkthrough**, including step-by-step simulation, data formatting, K selection, all visualization options, parameter recovery, and troubleshooting, see the **[full tutorial vignette](vignettes/tutorial.Rmd)**. It is designed to be read start to finish and assumes no prior familiarity with Bayesian mixture models.
 

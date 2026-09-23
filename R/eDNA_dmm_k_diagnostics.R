@@ -166,11 +166,20 @@ eDNA_dmm_k_diagnostics <- function(
   distance <- match.arg(distance)
   advanced <- level == "advanced"
 
-  get_fit <- if (is.function(fits)) fits else function(k) fits[[as.character(k)]]
+  # eDNA_loo()'s `fits`, the documented source for this argument, names its
+  # elements "K2", "K3", ... (see eDNA_loo()'s return value). Try that
+  # convention first and fall back to a plain integer name, so a list named
+  # either way (or K_values passed as strings) resolves correctly instead of
+  # silently returning NULL and leaving panels (e)/(f) empty.
+  get_fit <- if (is.function(fits)) fits else function(k) {
+    f <- fits[[paste0("K", k)]]
+    if (is.null(f)) f <- fits[[as.character(k)]]
+    f
+  }
   if (is.null(K_values)) {
     if (is.null(fits) || is.function(fits))
       rlang::abort("`K_values` is required unless `fits` is a named list.")
-    K_values <- sort(as.integer(names(fits)))
+    K_values <- sort(as.integer(sub("^K", "", names(fits))))
   }
   K_values <- sort(as.integer(K_values))
 
@@ -237,6 +246,21 @@ eDNA_dmm_k_diagnostics <- function(
   summ$elpd_sd[is.na(summ$elpd_sd)] <- 0
   tbl <- merge(tbl, summ, by = "K", all = TRUE)
 
+  # If not supplied, try building it from what elpd_by_run and convergence
+  # already carry: eDNA_loo()'s loo_by_chain has a per-chain `pareto_bad`
+  # count, and its loo_table has `n_obs`, so the common eDNA_loo() ->
+  # eDNA_dmm_k_diagnostics() pipeline gets panel (c) for free without the
+  # caller having to assemble a separate table by hand.
+  if (advanced && is.null(pareto_by_run) &&
+      !is.null(elpd_by_run$pareto_bad) && !is.null(convergence$n_obs)) {
+    pareto_by_run <- merge(
+      elpd_by_run[, intersect(c("K", "pareto_bad"), names(elpd_by_run)),
+                 drop = FALSE],
+      unique(convergence[, c("K", "n_obs")]),
+      by = "K")
+    names(pareto_by_run)[names(pareto_by_run) == "pareto_bad"] <- "n_pareto_bad"
+  }
+
   # Either a ready-made percentage or the counts it is built from is accepted,
   # since LOO tables store one or the other depending on how they were written.
   pk <- pr <- NULL
@@ -285,8 +309,54 @@ eDNA_dmm_k_diagnostics <- function(
 
   # (b) marginal gain. Filled versus open carries the 2 SE verdict; no legend,
   # so the distinction belongs in the figure caption.
+  #
+  # When possible this is computed properly: for each adjacent (K, K+1) pair,
+  # loo::loo_compare() on that pair's own best chain (the same chain
+  # elpd_by_run/panel (a) already treat as the valid predictive score, see
+  # eDNA_loo()). That gives a real paired SE, unlike differencing the
+  # already-averaged per-K means in `summ`, which throws the pairing away.
+  # This needs one stan_fit per K (i.e. `fits` as a real list, not an
+  # on-disk-loading function) and a `chain` column in `elpd_by_run` to know
+  # which chain is "best" at each K; without both, it falls back to an
+  # unpaired difference with no SE, exactly as before.
   if (is.null(adjacent)) {
-    adjacent <- data.frame(
+    can_pair <- advanced && !is.null(fits) && !is.function(fits) &&
+      !is.null(elpd_by_run$chain) && requireNamespace("loo", quietly = TRUE)
+    paired <- NULL
+    if (can_pair) {
+      paired <- tryCatch({
+        best_chain_at <- function(k) {
+          sub <- elpd_by_run[elpd_by_run$K == k, , drop = FALSE]
+          sub$chain[which.max(sub$elpd)]
+        }
+        rows <- list()
+        for (i in seq_len(length(K_values) - 1)) {
+          k1 <- K_values[i]; k2 <- K_values[i + 1]
+          f1 <- get_fit(k1); f2 <- get_fit(k2)
+          if (is.null(f1) || is.null(f2)) next
+          ll1 <- loo::extract_log_lik(f1$stan_fit, "log_lik",
+                                      merge_chains = FALSE)[, best_chain_at(k1), ]
+          ll2 <- loo::extract_log_lik(f2$stan_fit, "log_lik",
+                                      merge_chains = FALSE)[, best_chain_at(k2), ]
+          cmp <- loo::loo_compare(list(.k1 = loo::loo(ll1), .k2 = loo::loo(ll2)))
+          cmp <- as.data.frame(cmp)
+          r1 <- cmp[cmp$model == ".k1", , drop = FALSE]
+          r2 <- cmp[cmp$model == ".k2", , drop = FALSE]
+          # loo_compare() zeroes out whichever model is better; read the gain
+          # (elpd at k2 minus elpd at k1) off whichever row is NOT the zero.
+          if (isTRUE(all.equal(r1$elpd_diff, 0))) {
+            gain <- r2$elpd_diff; se <- r2$se_diff
+          } else {
+            gain <- -r1$elpd_diff; se <- r1$se_diff
+          }
+          rows[[length(rows) + 1L]] <- data.frame(
+            K_from = k1, K_to = k2, gain = gain, se_gain = se,
+            worth_it = (gain - 2 * se) > 0)
+        }
+        if (length(rows)) do.call(rbind, rows) else NULL
+      }, error = function(e) NULL)
+    }
+    adjacent <- if (!is.null(paired)) paired else data.frame(
       K_from = utils::head(summ$K, -1), K_to = summ$K[-1],
       gain = diff(summ$elpd_mean), se_gain = NA_real_, worth_it = NA)
   }
@@ -403,7 +473,7 @@ eDNA_dmm_k_diagnostics <- function(
       ggplot2::scale_y_continuous(limits = c(0, 1),
                                   labels = scales::percent_format(accuracy = 1)) +
       ggplot2::labs(x = "Number of communities (K)",
-                    y = "Assignment certainty above chance\n(rescaled between 1/K and 1)") +
+                    y = "Assignment certainty") +
       base
   }
 
