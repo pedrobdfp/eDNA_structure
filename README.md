@@ -2,7 +2,7 @@
 
 **Dirichlet-Multinomial Mixture Models for eDNA Metabarcoding Community Structure**
 
-`eDNAstructure` is an R package for fitting Bayesian Dirichlet-Multinomial Mixture (DMM) models to environmental DNA (eDNA) read count data from metabarcoding surveys. Given a sample × taxon count matrix and optional environmental covariates, the model identifies latent ecological communities, estimates their taxonomic compositions, and quantifies how environmental gradients drive community membership, all within a fully Bayesian framework with principled uncertainty quantification.
+`eDNAstructure` is an R package for fitting Bayesian Dirichlet-Multinomial Mixture (DMM) models to environmental DNA (eDNA) read count data from metabarcoding surveys. Given a sample × taxon count matrix and optional environmental covariates, the model identifies latent ecological communities, estimates their taxonomic compositions, and quantifies how environmental gradients correlate with community membership, all within a fully Bayesian framework with principled uncertainty quantification.
 
 ---
 
