@@ -84,44 +84,31 @@ fit <- eDNA_dmm(
 print(fit)
 summary(fit)
 
+# Did the four chains find the same communities, or just agree on names?
+fit$alignment$min_agreement
+fit$alignment$lp_rhat
+
 # Plot the results
 eDNA_dmm_structure(fit, metadata = data$metadata,
                    facet_var = "TrueCommunity", sort_var = "Depth")
 eDNA_dmm_compositions(fit)   # what each community looks like in species space
 eDNA_dmm_nmds(fit)$plot      # ordination, colored by assignment
-eDNA_dmm_beta(fit)$plot      # prior vs posterior for covariate effects
+eDNA_dmm_beta_intervals(fit)$plot  # covariate effects, with credible intervals
 ```
 
 ### Choosing K
 
 ```r
 loo_result <- eDNA_loo(data$counts, data$covariates, K_range = 2:5)
-loo_result$plot        # elbow plot
+loo_result$plot        # ELPD against K, unfilled where chains disagreed
+
+# Predictive fit and identifiability are separate questions:
+loo_result$loo_table[, c("K", "elpd", "lp_rhat", "min_agreement", "identified")]
 
 # All fitted models are stored: no need to refit
 fit <- loo_result$fits[["K4"]]
 ```
 
-### If you have replicates
-
-Don't sum them. Give each replicate its own row and group them with `replication`:
-
-```r
-r <- get_example_replicates()
-
-dim(r$counts)          # 60 replicates x 33 taxa: one row per sample
-head(r$replication, 6)  # which site each row came from
-nrow(r$covariates)     # 20: covariates stay station-level
-
-fit_rep <- eDNA_dmm(
-  counts     = r$counts,
-  replication = r$replication,   # <- this switches on the hierarchical model
-  covariates = r$covariates,
-  K          = 4
-)
-
-fit_rep$phi_mean   # replicate reproducibility
-```
 
 ### Simulating your own data
 
@@ -165,7 +152,7 @@ The model needs **two things**, and only the first is required:
 
 The primary input to `eDNA_dmm()` is a **sample × taxon** matrix of non-negative integer read counts:
 
-- **Rows** = samples (stations, replicates, individuals, etc.)
+- **Rows** = samples, one row per sample
 - **Columns** = taxa or ASVs, taxonomic annotation is not required
 - **Values** = raw integer read counts (do not normalize)
 
@@ -197,26 +184,6 @@ head(data$metadata)
 # 1   STN_001              1     82             198
 # 2   STN_002              1     79             204
 # 3   STN_003              2     11             197
-```
-
-### Replicates (optional)
-
-If a station was sequenced more than once (PCR or sampling replicates), give each replicate its own row and use `replication` to say which rows belong together. Do **not** sum them. See [Replicated samples](#replicated-samples-replication) below for why.
-
-```r
-rep_counts[1:4, 1:4]
-#                 Sp_1  Sp_2  Sp_3  Sp_4
-# STN_001_B1       402   315   118    70
-# STN_001_B2       421   298   131    77
-# STN_002_B1       380   270   101    58
-# STN_002_B2       395   281    95    64
-
-replication <- c("STN_001", "STN_001", "STN_002", "STN_002")
-```
-
-Covariates stay **station-level**: supply either one row per station (in order of first appearance in `replication`) or one row per row of `counts`, in which case they are collapsed automatically. Replication may be ragged, stations can have different numbers of replicates, and stations with a single replicate are fully supported.
-
-Leave `replication` unset if each row is an independent sample. That is the standard model and the right choice for unreplicated data.
 
 ---
 
@@ -228,24 +195,21 @@ The core function. Fits a Dirichlet-Multinomial Mixture model via Stan and retur
 
 ```r
 fit <- eDNA_dmm(
-  counts           = my_counts,   # sample × taxon integer count matrix
-  covariates       = my_covs,     # sample × covariate data frame, or NULL
+  counts           = my_counts,   # sample x taxon integer count matrix
+  covariates       = my_covs,     # sample x covariate data frame, or NULL
   K                = 4,           # number of latent communities to fit
-  replication       = NULL,        # group replicate rows into stations; NULL = each row
-                                  # is an independent sample. See "Replicated samples" below
-  scale_covariates = TRUE,        # Z-score standardize covariates (strongly recommended)
-  chains           = 1,           # number of MCMC chains (see note on label switching below)
-  iter             = 4000,        # total iterations per chain (including warmup)
+  scale_covariates = TRUE,        # standardise covariates (strongly recommended)
+  chains           = 4,           # MCMC chains; their labels are aligned automatically
+  cores            = NULL,        # NULL = one core per chain, capped at physical cores
+  method           = "STEPHENS",  # label alignment algorithm
+  iter             = 4000,        # total iterations per chain, including warmup
   warmup           = 2000,        # warmup iterations to discard
-  adapt_delta      = 0.95,        # HMC target acceptance rate; increase to 0.99 if divergences
-  max_treedepth    = 12,          # increase to 14–15 if "max treedepth exceeded" warnings
-  seed             = 13,          # random seed for reproducibility
-  conc             = 0.5,         # Dirichlet prior concentration: < 1 = sparse communities
-  alpha_shape      = 5,           # Gamma prior shape for overdispersion parameter alpha
-  alpha_rate       = 2,           # Gamma prior rate  (prior mean = shape/rate = 2.5)
-  phi_shape        = 2,           # Gamma prior shape for replicate dispersion phi
-  phi_rate         = 0.02,        # Gamma prior rate  (prior mean = 100)
-                                  # phi_* are used only when replication is supplied
+  adapt_delta      = 0.95,        # HMC target acceptance; raise to 0.99 if divergences
+  max_treedepth    = 12,          # raise to 14 or 15 if treedepth warnings appear
+  seed             = 13,          # random seed
+  conc             = 0.5,         # Dirichlet prior concentration; below 1 = sparse
+  alpha_shape      = 5,           # Gamma prior shape for overdispersion alpha
+  alpha_rate       = 2,           # Gamma prior rate; prior mean = shape / rate = 2.5
   verbose          = TRUE         # print sampling progress
 )
 ```
@@ -254,58 +218,61 @@ The returned `edna_dmm_fit` object contains:
 
 | Element | Description |
 |---------|-------------|
-| `sample_info` | Data frame: posterior membership probabilities and MAP assignment per sample |
-| `pi_mean` | Matrix [K × S]: posterior mean community compositions |
-| `beta_summary` | Data frame: covariate coefficient summaries with ESS and reliability |
+| `sample_info` | Data frame: membership probability per community, most probable community, and assignment certainty per sample |
+| `pi_mean` | Matrix [K x S]: posterior mean community compositions |
+| `beta_summary` | Data frame: coefficient summaries with ESS and reliability |
+| `beta_draws_aligned` | Array [draws x K x P+1]: aligned, centred coefficient draws |
+| `alignment` | Label alignment method, permutations, and the diagnostics below |
 | `alpha_mean` | Scalar: posterior mean overdispersion |
-| `theta_mean` | Matrix [N × S]: posterior mean station compositions (replicate model only, else `NULL`) |
-| `phi_mean` | Scalar: posterior mean replicate dispersion (replicate model only, else `NULL`) |
 | `stan_fit` | Raw `rstan::stanfit` object for advanced diagnostics |
 
-> **On single chains:** Mixture models suffer from label switching across chains, "Community 1" in chain A may map to "Community 2" in chain B, making multi-chain Rhat diagnostics meaningless. A single long chain sidesteps this. Use within-chain ESS (reported by `summary()`) as your convergence criterion.
+#### Community labels are aligned for you
 
----
+A mixture likelihood does not change if the community labels are permuted, so
+chains that agree completely about the structure of the data can still
+disagree about which community is called 1, 2 or 3. Estimates and convergence
+diagnostics computed in that state describe the labelling rather than the fit.
 
-### Replicated samples: `replication`
+`eDNA_dmm()` aligns every posterior draw onto a common labelling before
+computing anything, using the algorithm of Stephens (2000) from the
+**label.switching** package. Compositions, membership probabilities and
+coefficients are all rebuilt from the aligned draws, so `summary()` reports
+convergence for the model rather than for its naming.
 
-If your stations have PCR or sampling replicates, pass each replicate as its own row of `counts` and use `replication` to group them. This switches `eDNA_dmm()` to a hierarchical model that estimates each station's own composition:
-
-```
-theta_i ~ Dirichlet(alpha * pi_k)                      # the station's true composition
-y_ir    ~ DirichletMultinomial(N_ir, phi * theta_i)    # each replicate
-```
-
-There are then two dispersion parameters answering two different questions:
-
-| Parameter | Meaning |
-|-----------|---------|
-| `alpha` | How tightly **stations** cluster around their community composition (same as in the standard model) |
-| `phi` | How tightly **replicates** cluster around their own station: replicate reproducibility |
+Alignment fixes disagreement about names. It cannot fix disagreement about the
+grouping itself, so two further numbers are reported that relabelling cannot
+affect:
 
 ```r
-fit <- eDNA_dmm(
-  counts     = rep_counts,        # one row per replicate
-  replication = replication,        # which rows belong to the same station
-  covariates = station_covs,      # station-level covariates
-  K          = 4,
-  phi_shape  = 2,                 # Gamma prior on phi (default mean 100)
-  phi_rate   = 0.02
-)
-
-fit$theta_mean   # [N stations × S taxa] posterior mean station compositions
-fit$phi_mean     # posterior mean replicate reproducibility
+fit$alignment$lp_rhat         # convergence of the log posterior density,
+                              # invariant to labelling by construction
+fit$alignment$min_agreement   # share of samples the two least similar chains
+                              # place in the same community
 ```
 
-**Why not just sum the replicates?** Summing would be lossless if replicates were plain multinomial draws from the station's composition, their sum is a sufficient statistic, and integrating the station composition out gives you back exactly the standard model. Replicates are informative *precisely because* they are overdispersed relative to multinomial (PCR jackpotting, uneven template, sampling effects). Replicate concordance versus scatter is the signal, and summing discards it.
+Both close to one means the chains found the same solution. A clear departure
+in either means they found different ones, which usually indicates a `K` the
+data do not support.
 
-Practical notes:
+#### Covariate coefficients have no reference community
 
-- **Ragged replication is fine.** Stations may have different numbers of replicates. A station with only one replicate is still fitted normally; its `theta_i` is informed by that replicate plus shrinkage toward `alpha * pi_k`, using a `phi` learned from the replicated stations.
-- **Unreplicated data is unaffected.** If no station has more than one replicate, `alpha` and `phi` are not separately identified and the replicate model would buy you nothing, so `eDNA_dmm()` uses the standard model instead and tells you. Leaving `replication` unset is always the right choice when each row is an independent sample.
-- **`sample_info` is still one row per station**, so `eDNA_dmm_structure()`, `eDNA_dmm_nmds()` and `eDNA_dmm_beta()` all work unchanged.
-- **K selection stays on the standard model.** `eDNA_loo()` deliberately uses the summed model: with a per-station `theta_i`, holding out a station leaves its own parameter unidentified, so station-level LOO is not well defined. The replicate model is slower too, which matters when sweeping many K values.
+Adding the same constant to every community's linear predictor leaves the
+softmax unchanged, so one degree of freedom per covariate has to be pinned
+down. This package pins it by making the coefficients sum to zero across
+communities, so each is that community's deviation from the average community
+and all `K` are estimated.
+
+To read them against one particular community instead, pass `reference`. No
+refitting is needed, because the choice is a change of coordinates applied to
+the finished draws:
+
+```r
+eDNA_dmm_beta_intervals(fit)                  # deviation from the average
+eDNA_dmm_beta_intervals(fit, reference = 3)   # contrasts against community 3
+```
 
 ---
+
 
 ### `eDNA_dmm_structure()`: Structure bar plot
 
@@ -654,37 +621,6 @@ The simulation's internal tables (contributor lists, per-organism shedding, raw 
 
 ---
 
-### `get_example_replicates()`: Built-in replicated example
-
-The same survey with three replicates per site, so the expected shape of replicated data is visible without simulating it.
-
-```r
-r <- get_example_replicates()
-
-r$counts      # integer matrix, 60 replicates × 33 taxa
-              #   rownames: STN_001_B1, STN_001_B2, STN_001_B3, STN_002_B1, ...
-r$replication  # character, length 60: which site each row came from
-r$covariates  # data frame, 20 × 2: station-level, one row per site
-r$metadata    # data frame, 20 × 4: station-level labelling columns
-```
-
-The only structural difference from `get_example_data()`: `counts` has one row per **replicate**, and `replication` says which rows belong together. Covariates stay **station-level**, 20 rows, not 60.
-
-```r
-fit <- eDNA_dmm(
-  counts     = r$counts,
-  replication = r$replication,
-  covariates = r$covariates,
-  K          = 4
-)
-
-fit$theta_mean   # [20 stations × 33 taxa] posterior mean station compositions
-fit$phi_mean     # replicate reproducibility
-```
-
-See [Replicated samples](#replicated-samples-replication) for why you should not sum replicates before fitting.
-
----
 
 
 ### `eDNA_clear_stan_cache()`: Reset the compiled model cache
@@ -805,8 +741,19 @@ The global overdispersion α absorbs both technical (PCR, sequencing) and ecolog
 
 ## Frequently asked questions
 
-**Why only one chain?**
-Label switching: "Community 1" in chain A may map to "Community 2" in chain B. Multi-chain Rhat values are pathological even when each chain converges perfectly. One long chain avoids this. Check within-chain ESS instead (printed by `summary()`).
+**The chains disagree about which community is which. Is that a problem?**
+No, and it is handled for you. A mixture likelihood is unchanged by permuting
+the component labels, so chains routinely number the same communities
+differently. `eDNA_dmm()` aligns every draw onto a common labelling before
+summarising anything, so the estimates and diagnostics you see already
+account for it.
+
+**How do I know the chains found the same communities, not just the same names?**
+Check `fit$alignment$min_agreement`, the share of samples the two least
+similar chains place in the same community, and `fit$alignment$lp_rhat`, which
+is invariant to labelling. Both near one means one solution found repeatedly.
+If either departs clearly, the chains found genuinely different groupings and
+relabelling cannot reconcile them; try a smaller `K`.
 
 **I have divergent transitions. What do I do?**
 Increase `adapt_delta` toward `0.99`. If they persist, try lower K or verify your count matrix has no all-zero rows or columns.

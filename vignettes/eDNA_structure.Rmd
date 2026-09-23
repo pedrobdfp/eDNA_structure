@@ -165,8 +165,6 @@ fit <- eDNA_dmm(counts, covariates = covariates, K = 4)  # with them
 > pass it to the plotting functions' `metadata` argument instead. This is why
 > `get_example_data()` returns `covariates` and `metadata` as two objects.
 
-A replicated version, one row per sample plus a `replication` column, is in
-`example_edna_replicates_raw.csv` in the same folder. See *Replicated samples*
 below.
 
 
@@ -178,8 +176,7 @@ The most important input is a **sample × taxon count matrix**. The function
 - A `matrix` with non-negative integer values
 - Or a `data.frame` where every column is numeric
 
-Rows represent **samples** (individual water samples, stations, replicates, 
-whatever your unit of observation is). Columns represent **taxa** or **ASVs**
+Rows represent **samples** (individual water samples or stations).
 , taxonomic annotation is not required. The model is equally applicable to
 raw ASV tables and to taxonomically-collapsed count tables.
 
@@ -313,13 +310,12 @@ fit_k2 <- eDNA_dmm(
 ```
 
 When you run this, you will see Stan's sampling progress printed to the
-console. This is normal. A single chain of 4000 iterations (2000 warmup)
+console. This is normal. Four chains of 4000 iterations (2000 warmup)
 typically takes 1–5 minutes depending on N and S.
 
 ```r
 ## Fitting DMM: N=20 samples, S=33 taxa, K=2 communities, P=2 covariates
 ## MCMC: 1 chain(s), 4000 iterations (2000 warmup, 2000 sampling)
-## Note: Using single chain (recommended for mixture models)
 ## ...
 ## Chain 1: Iteration: 1 / 4000 [  0%]  (Warmup)
 ## Chain 1: Iteration: 400 / 4000 [ 10%]  (Warmup)
@@ -400,55 +396,6 @@ fit_k2$beta_summary
 fit_k2$alpha_mean
 ```
 
-# Replicated samples
-
-If a station was sequenced more than once, PCR replicates, or separate bottles
-from the same water, give each replicate its own row of `counts` and use
-`replication` to say which rows belong together. **Do not sum them.**
-
-```{r replicates, eval=FALSE}
-fit_rep <- eDNA_dmm(
-  counts     = rep_counts,   # one row per replicate
-  replication = replication,   # which rows belong to the same station
-  covariates = station_covs, # station-level covariates
-  K          = 4
-)
-
-fit_rep$theta_mean   # posterior mean composition of each station
-fit_rep$phi_mean     # replicate reproducibility
-```
-
-This switches to a hierarchical model with a composition `theta_i` per station:
-
-```
-theta_i ~ Dirichlet(alpha * pi_k)                      # the station's composition
-y_ir    ~ DirichletMultinomial(N_ir, phi * theta_i)    # each replicate
-```
-
-giving two dispersion parameters that answer different questions, `alpha` for
-how tightly *stations* cluster around their community, and `phi` for how tightly
-*replicates* cluster around their own station.
-
-**Why not just sum the replicates?** Summing would be lossless if replicates were
-plain multinomial draws from the station's composition. They are informative
-precisely *because* they are overdispersed relative to multinomial (PCR
-jackpotting, uneven template, sampling effects). That scatter is the signal, and
-summing discards it.
-
-Ragged replication is fine, stations may have different numbers of replicates,
-and a station with only one is still fitted normally. If *no* station has more
-than one replicate, `alpha` and `phi` are not separately identified, so
-`eDNA_dmm()` falls back to the standard model and tells you. Leave `replication`
-unset whenever each row is an independent sample; that is the standard model and
-the right choice for unreplicated data.
-
-> The full tutorial (`vignette("tutorial")`) works through a complete replicated
-> survey, simulating it, reshaping it into model input, fitting it, and checking
-> parameter recovery for `phi`.
-
----
-
----
 
 # Choosing K: How many communities?
 

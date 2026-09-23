@@ -34,6 +34,16 @@
 #' @param intervals A length-2 numeric vector giving the inner (thick) and
 #'   outer (thin) interval widths, each strictly between 0 and 1. Default
 #'   `c(0.5, 0.9)`. Order does not matter; the wider one is drawn thin.
+#' @param reference How the coefficients are identified for display.
+#'   `"none"` (default) centres them across communities, so each
+#'   value is that community's deviation from the average community and all
+#'   `K` communities are drawn. An integer instead reads every
+#'   coefficient as a contrast against that community, which is then omitted
+#'   as the reference. `NULL` uses the fit's own `beta_reference` if it has one.
+#'
+#'   Changing this requires no refitting. The softmax is invariant to adding
+#'   a constant across communities, so the choice is a normalisation applied
+#'   to the finished draws, not an estimate.
 #' @param point_est One of `"median"` (default) or `"mean"`: the posterior
 #'   summary the point marks.
 #' @param community_colors Named character vector of colors, or `NULL`
@@ -76,6 +86,7 @@ eDNA_dmm_beta_intervals <- function(
     covariates_to_plot = NULL,
     show_intercept     = FALSE,
     intervals          = c(0.5, 0.9),
+    reference          = "none",
     point_est          = c("median", "mean"),
     community_colors   = NULL,
     color_by_community = TRUE,
@@ -132,15 +143,34 @@ eDNA_dmm_beta_intervals <- function(
     ))
 
   # ── Summarise the draws ─────────────────────────────────────────────────────
-  beta_mat  <- as.matrix(fit$stan_fit, pars = "beta")
-  cov_j_map <- stats::setNames(seq_along(cov_labels), cov_labels)
+  # Goes through dmm_beta_draws() so that a fit relabelled by
+  # dmm_relabel_communities() and any re-referencing are both honoured.
+  # reference = "none" centres the coefficients across communities instead of
+  # subtracting one of them. Because sum_j (beta_k - beta_j) = K * beta_k when
+  # the coefficients are centred, each value is then the average of that
+  # community's contrasts against all the others - a function of identified
+  # contrasts only, depending on no choice of reference. Every community is
+  # therefore estimated and none is dropped from the figure.
+  centred <- identical(reference, "none")
+  ref_use <- if (centred) NULL
+             else if (!is.null(reference)) reference else fit$beta_reference
+  d <- dmm_beta_draws(fit)
+  if (!is.null(fit$community_order))
+    d <- d[, fit$community_order, , drop = FALSE]
+  if (centred) {
+    for (j in seq_len(dim(d)[3])) d[, , j] <- d[, , j] - rowMeans(d[, , j])
+  } else if (!is.null(ref_use)) {
+    r <- d[, ref_use, , drop = FALSE]
+    for (k in seq_len(dim(d)[2])) d[, k, ] <- d[, k, ] - r[, 1, ]
+  }
+  ref_idx <- if (centred) NA_integer_
+             else if (!is.null(ref_use)) as.integer(ref_use) else K
 
   rows <- list()
-  for (comm_i in seq_len(K - 1)) {
+  for (comm_i in seq_len(K)) {
+    if (!is.na(ref_idx) && comm_i == ref_idx) next   # reference row is zero
     for (cov_name in keep) {
-      pname <- sprintf("beta[%d,%d]", comm_i, cov_j_map[[cov_name]])
-      if (!pname %in% colnames(beta_mat)) next
-      draws <- beta_mat[, pname]
+      draws <- d[, comm_i, cov_name]
       qi <- stats::quantile(draws, q_inner, names = FALSE)
       qo <- stats::quantile(draws, q_outer, names = FALSE)
       rows[[length(rows) + 1L]] <- data.frame(
@@ -157,7 +187,9 @@ eDNA_dmm_beta_intervals <- function(
   tbl <- do.call(rbind, rows)
 
   # Communities run top to bottom in order; covariates keep model order.
-  comm_levels    <- paste0("Community ", seq_len(K - 1))
+  comm_levels    <- setdiff(paste0("Community ", seq_len(K)),
+                            if (is.na(ref_idx)) character(0)
+                            else paste0("Community ", ref_idx))
   tbl$community  <- factor(tbl$community, levels = rev(comm_levels))
   tbl$covariate  <- factor(tbl$covariate, levels = keep)
 

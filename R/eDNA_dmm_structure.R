@@ -336,7 +336,7 @@ eDNA_dmm_structure <- function(
 
   legend_plot <- build_panel(si, show_legend = TRUE) +
     ggplot2::theme(legend.position = legend_position) +
-    ggplot2::guides(fill = ggplot2::guide_legend())
+    ggplot2::guides(fill = ggplot2::guide_legend(nrow = legend_nrow, ncol = legend_ncol))
 
   if (legend_position == "right") {
     legend_grob <- cowplot::get_plot_component(legend_plot, "guide-box-right", return_all = TRUE)
