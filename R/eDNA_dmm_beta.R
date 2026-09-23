@@ -37,7 +37,7 @@
 #'   average community, at high values of the covariate.
 #' - **Posterior << 0**: this community becomes less likely, relative to the
 #'   average community, at high values of the covariate.
-#' - **Posterior ≈ prior**: the data do not constrain this coefficient; the
+#' - **Posterior ~ prior**: the data do not constrain this coefficient; the
 #'   covariate may not predict community membership.
 #'
 #' Pass an integer `reference` to instead read every coefficient as a contrast
@@ -162,12 +162,12 @@ eDNA_dmm_beta <- function(
 
   layout <- match.arg(layout, c("joint", "separate"))
 
-  # ── Community colors ──────────────────────────────────────────────────────────
+  # -- Community colors ----------------------------------------------------------
   if (is.null(community_colors)) {
     community_colors <- make_community_colors(K)
   }
 
-  # ── Beta draws (relabelled and re-referenced by dmm_beta_draws) ──────────────
+  # -- Beta draws (relabelled and re-referenced by dmm_beta_draws) --------------
   # Auto-annotate only when K=2 (one community, no overlap)
   if (is.null(show_annotations)) {
     show_annotations <- (K == 2)
@@ -176,7 +176,7 @@ eDNA_dmm_beta <- function(
 
   cov_labels  <- c("intercept", fit$covariate_names)
 
-  # ── Filter covariates ─────────────────────────────────────────────────────────
+  # -- Filter covariates ---------------------------------------------------------
   all_cov_labels <- if (show_intercept) cov_labels else cov_labels[cov_labels != "intercept"]
 
   if (!is.null(covariates_to_plot)) {
@@ -201,7 +201,7 @@ eDNA_dmm_beta <- function(
     )
   }
 
-  # ── Build posterior long data frame ───────────────────────────────────────────
+  # -- Build posterior long data frame -------------------------------------------
   # Draws come through dmm_beta_draws() rather than straight off the stan_fit,
   # so that a relabelled fit and any change of reference community are both
   # honoured. Reading the raw draws here would silently disagree with
@@ -240,7 +240,7 @@ eDNA_dmm_beta <- function(
   }
   posterior_df <- do.call(rbind, Filter(Negate(is.null), posterior_rows))
 
-  # ── Build prior data frame ─────────────────────────────────────────────────────
+  # -- Build prior data frame -----------------------------------------------------
   prior_rows <- vector("list", length(all_cov_labels))
   for (j in seq_along(all_cov_labels)) {
     prior_rows[[j]] <- data.frame(
@@ -253,10 +253,10 @@ eDNA_dmm_beta <- function(
   }
   prior_df <- do.call(rbind, prior_rows)
 
-  # ── Combine ───────────────────────────────────────────────────────────────────
+  # -- Combine -------------------------------------------------------------------
   plot_df <- rbind(posterior_df, prior_df)
 
-  # ── Annotation data frame ─────────────────────────────────────────────────────
+  # -- Annotation data frame -----------------------------------------------------
   if (show_annotations) {
     ann_rows <- vector("list", (K - 1) * length(all_cov_labels))
     idx <- 1L
@@ -283,7 +283,7 @@ eDNA_dmm_beta <- function(
     ann_df <- do.call(rbind, Filter(Negate(is.null), ann_rows))
   }
 
-  # ── Build plot ────────────────────────────────────────────────────────────────
+  # -- Build plot ----------------------------------------------------------------
   # Color map: communities + "Prior" as grey
   comm_names    <- setdiff(paste0("Community ", seq_len(K)),
                            if (is.na(ref_idx)) character(0) else paste0("Community ", ref_idx))
@@ -337,7 +337,7 @@ eDNA_dmm_beta <- function(
       plot.subtitle    = ggplot2::element_text(color = "grey40", size = base_size - 2)
     )
 
-  # ── Annotations ───────────────────────────────────────────────────────────────
+  # -- Annotations ---------------------------------------------------------------
   if (show_annotations) {
     p <- p + ggplot2::geom_text(
       data        = ann_df,
@@ -350,7 +350,7 @@ eDNA_dmm_beta <- function(
     )
   }
 
-  # ── Faceting by layout ────────────────────────────────────────────────────────
+  # -- Faceting by layout --------------------------------------------------------
   if (layout == "joint") {
     # One panel per covariate; communities overlaid
     p <- p + ggplot2::facet_wrap(~ .data$covariate, scales = "free", nrow = 1)
@@ -362,7 +362,7 @@ eDNA_dmm_beta <- function(
     )
   }
 
-  # ── Return ────────────────────────────────────────────────────────────────────
+  # -- Return --------------------------------------------------------------------
   # Filter beta_summary to the user-selected covariates
   beta_tbl <- fit$beta_summary
   if (!show_intercept) {

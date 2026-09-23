@@ -43,7 +43,7 @@
 #' permutation-invariant `lp__` Rhat also exceeds `rhat_threshold`. Agreement
 #' near one means one solution found repeatedly. A drop means the chains found
 #' genuinely different partitions, which relabelling cannot reconcile and a
-#' longer run will not fix — the usual cause is a K the data do not identify.
+#' longer run will not fix -- the usual cause is a K the data do not identify.
 #' Where chain agreement is unavailable the panel falls back to `lp__` Rhat.
 #'
 #' **(e) Assignment certainty.** The distribution across samples of the largest
@@ -60,10 +60,10 @@
 #'
 #' **(f) Community distinctness.** The smallest distance between any two
 #' community compositions. Compositions are compared with Aitchison distance by
-#' default — Euclidean distance between centred log-ratio transforms, the
+#' default -- Euclidean distance between centred log-ratio transforms, the
 #' standard metric for compositional data, which weighs a ratio between two rare
 #' taxa as heavily as one between two abundant taxa. When an added community is
-#' a near-copy of one already present, this collapses — the model has begun
+#' a near-copy of one already present, this collapses -- the model has begun
 #' splitting hairs rather than finding structure. A sharp drop marks the K at
 #' which that starts.
 #'
@@ -117,7 +117,7 @@
 #'   panel (e) shows the whole distribution and does not use it. Default `0.8`.
 #' @param distance Distance between community compositions in panel (f):
 #'   `"aitchison"` (default) or `"tv"` for total variation. Aitchison respects
-#'   the simplex geometry; total variation is bounded on [0, 1] and easier to
+#'   the simplex geometry; total variation is bounded on `[0, 1]` and easier to
 #'   read but is dominated by the abundant taxa.
 #' @param base_size Base font size. Default `12`.
 #'
@@ -206,7 +206,7 @@ eDNA_dmm_k_diagnostics <- function(
   }
   K_values <- sort(as.integer(K_values))
 
-  # ── Per-K structural summaries, for panels (e) and (f) only ─────────────────
+  # -- Per-K structural summaries, for panels (e) and (f) only -----------------
   tbl     <- data.frame(K = K_values)
   cert_df <- NULL
   if (advanced && !is.null(fits)) {
@@ -244,7 +244,7 @@ eDNA_dmm_k_diagnostics <- function(
     }
   }
 
-  # ── ELPD, and the reliability of the approximation behind it ────────────────
+  # -- ELPD, and the reliability of the approximation behind it ----------------
   if (is.null(elpd_by_run)) {
     if (is.null(fits))
       rlang::abort("Supply `elpd_by_run`, or `fits` to compute it from.")
@@ -405,8 +405,8 @@ eDNA_dmm_k_diagnostics <- function(
       paste(sprintf("%.1f", off_by[i]), collapse = ", ")), call. = FALSE)
   }
 
-  adjacent$step <- factor(sprintf("%d→%d", adjacent$K_from, adjacent$K_to),
-                          levels = sprintf("%d→%d", adjacent$K_from, adjacent$K_to))
+  adjacent$step <- factor(sprintf("%d->%d", adjacent$K_from, adjacent$K_to),
+                          levels = sprintf("%d->%d", adjacent$K_from, adjacent$K_to))
   pb <- ggplot2::ggplot(adjacent, ggplot2::aes(x = .data$step, y = .data$gain)) +
     ggplot2::geom_hline(yintercept = 0, linetype = "dashed", colour = "grey40") +
     { if (any(!is.na(adjacent$se_gain)))

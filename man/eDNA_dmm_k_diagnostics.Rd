@@ -76,7 +76,7 @@ panel (e) shows the whole distribution and does not use it. Default \code{0.8}.}
 
 \item{distance}{Distance between community compositions in panel (f):
 \code{"aitchison"} (default) or \code{"tv"} for total variation. Aitchison respects
-the simplex geometry; total variation is bounded on \link{0, 1} and easier to
+the simplex geometry; total variation is bounded on \verb{[0, 1]} and easier to
 read but is dominated by the abundant taxa.}
 
 \item{base_size}{Base font size. Default \code{12}.}
@@ -131,7 +131,7 @@ aligned (\code{\link[=dmm_align_labels]{dmm_align_labels()}}); open points mark 
 permutation-invariant \code{lp__} Rhat also exceeds \code{rhat_threshold}. Agreement
 near one means one solution found repeatedly. A drop means the chains found
 genuinely different partitions, which relabelling cannot reconcile and a
-longer run will not fix — the usual cause is a K the data do not identify.
+longer run will not fix -- the usual cause is a K the data do not identify.
 Where chain agreement is unavailable the panel falls back to \code{lp__} Rhat.
 
 \strong{(e) Assignment certainty.} The distribution across samples of the largest
@@ -148,10 +148,10 @@ every K. The red diamond is the mean, reported as \code{mean_excess} in the tabl
 
 \strong{(f) Community distinctness.} The smallest distance between any two
 community compositions. Compositions are compared with Aitchison distance by
-default — Euclidean distance between centred log-ratio transforms, the
+default -- Euclidean distance between centred log-ratio transforms, the
 standard metric for compositional data, which weighs a ratio between two rare
 taxa as heavily as one between two abundant taxa. When an added community is
-a near-copy of one already present, this collapses — the model has begun
+a near-copy of one already present, this collapses -- the model has begun
 splitting hairs rather than finding structure. A sharp drop marks the K at
 which that starts.
 

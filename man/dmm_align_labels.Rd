@@ -50,7 +50,7 @@ When that happens, \code{pi[3, ]} means one community for part of the run and a
 different one for the rest, so the posterior mean composition is an average
 of two communities and describes neither. The symptom is a high Rhat or a
 low ESS on \code{pi} while permutation-invariant quantities such as \code{lp__} and
-the log-likelihood look healthy — a chain that sampled perfectly well and
+the log-likelihood look healthy -- a chain that sampled perfectly well and
 merely renamed things partway through.
 
 Aligning the draws repairs it: the estimates become meaningful, and the

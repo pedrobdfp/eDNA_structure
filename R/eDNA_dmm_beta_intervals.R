@@ -128,7 +128,7 @@ eDNA_dmm_beta_intervals <- function(
   q_inner <- c((1 - inner) / 2, 1 - (1 - inner) / 2)
   q_outer <- c((1 - outer) / 2, 1 - (1 - outer) / 2)
 
-  # ── Which coefficients ──────────────────────────────────────────────────────
+  # -- Which coefficients ------------------------------------------------------
   cov_labels <- c("intercept", fit$covariate_names)
   keep <- if (show_intercept) cov_labels else setdiff(cov_labels, "intercept")
   if (!is.null(covariates_to_plot)) {
@@ -147,7 +147,7 @@ eDNA_dmm_beta_intervals <- function(
       i = "Check `covariates_to_plot` and `show_intercept`."
     ))
 
-  # ── Summarise the draws ─────────────────────────────────────────────────────
+  # -- Summarise the draws -----------------------------------------------------
   # Goes through dmm_beta_draws() so that a fit relabelled by
   # dmm_relabel_communities() and any re-referencing are both honoured.
   # reference = "none" centres the coefficients across communities instead of
@@ -198,7 +198,7 @@ eDNA_dmm_beta_intervals <- function(
   tbl$community  <- factor(tbl$community, levels = rev(comm_levels))
   tbl$covariate  <- factor(tbl$covariate, levels = keep)
 
-  # ── Colors ──────────────────────────────────────────────────────────────────
+  # -- Colors ------------------------------------------------------------------
   if (is.null(community_colors)) community_colors <- make_community_colors(K)
   pal <- if (isTRUE(color_by_community)) {
     community_colors[comm_levels]
@@ -206,7 +206,7 @@ eDNA_dmm_beta_intervals <- function(
     stats::setNames(rep("#1D3557", length(comm_levels)), comm_levels)
   }
 
-  # ── Plot ────────────────────────────────────────────────────────────────────
+  # -- Plot --------------------------------------------------------------------
   # `fill` carries credibility and `colour` carries community, so shape 21 is
   # used throughout: a filled point is a coefficient whose outer interval
   # excludes zero, a hollow one is a coefficient that crosses it.

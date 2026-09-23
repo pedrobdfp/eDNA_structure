@@ -130,7 +130,7 @@ reference community and all \code{K} communities are drawn. Interpret:
 average community, at high values of the covariate.
 \item \strong{Posterior << 0}: this community becomes less likely, relative to the
 average community, at high values of the covariate.
-\item \strong{Posterior ≈ prior}: the data do not constrain this coefficient; the
+\item \strong{Posterior ~ prior}: the data do not constrain this coefficient; the
 covariate may not predict community membership.
 }
 

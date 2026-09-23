@@ -86,7 +86,7 @@ full control, or use `simulate_eDNA_survey()` to run all five at once.
 
 ### Step 1: Community compositions
 
-`generate_community_compositions()` builds a K × S matrix where each row is
+`generate_community_compositions()` builds a K x S matrix where each row is
 one community's species frequency vector. The key design choices are how many
 dominant species each community has, whether communities share habitat groups
 (which determines which species they share), and how much spillover there is
@@ -371,14 +371,15 @@ and can be ignored.
 
 > **Note on community labels:** a mixture likelihood does not change if the
 > community labels are permuted, so chains often number the same communities
-> differently. `eDNA_dmm()` aligns every draw onto a common labelling before
+> differently. This is called label switching.
+> `eDNA_dmm()` aligns every draw onto a common labelling before
 > summarising, so the reported estimates and diagnostics describe the model
 > rather than its naming. `fit$alignment$min_agreement` and
 > `fit$alignment$lp_rhat` say whether the chains found the same communities,
 > not merely the same names.
 
 > **Note on runtime:** Stan compiles the model to C++ on the first call after
-> installation. This takes 1–2 minutes and produces a lot of console output, 
+> installation. This takes 1-2 minutes and produces a lot of console output, 
 > this is normal. All subsequent calls skip compilation entirely.
 
 ## Reading the output
@@ -394,14 +395,14 @@ summary(fit4)
 `summary()` reports four things:
 
 - **Alpha (overdispersion)**: captures compositional variance not explained by
-  community structure. Typical eDNA values are 1–5. Our simulation used α = 3
+  community structure. Typical eDNA values are 1-5. Our simulation used α = 3
   so a well-fitted model should recover something close to that.
-- **Assignment certainty**: fraction of samples with ≥ 80% posterior probability
+- **Assignment certainty**: fraction of samples with >= 80% posterior probability
   of belonging to a single community. High certainty indicates well-separated
   communities; many ambiguous samples suggests K may be too high or communities
   genuinely overlap.
 - **Beta coefficients**: posterior mean, 90% credible interval, and reliability
-  rating for each covariate × community combination. Reliability is
+  rating for each covariate x community combination. Reliability is
   `"trustworthy"` when effective sample size (ESS) > 400.
 - **HMC diagnostics**: look for zero divergent transitions and no
   `max_treedepth` warnings. See the Troubleshooting section if either appears.
@@ -511,12 +512,12 @@ k_diag$table    # one row per K, every panel's numbers in one place
 
 | Panel | Question | A drop or flattening here means |
 |---|---|---|
-| (a) Predictive fit | LOO ELPD vs. K, averaged over chains | Rarely informative alone, this is the ambiguous panel |
-| (b) Marginal gain | Paired ELPD difference between adjacent K, with 2×SE | The step to this K is not worth it: filled points clear 2 SE, open points do not |
-| (c) Reliability | Share of samples with a Pareto k above `pareto_threshold` (default 0.7) | The ELPD estimate at that K cannot be trusted; usually the fit is unstable there anyway |
+| (a) Predictive fit | LOO ELPD vs. K, averaged over chains | Rarely informative alonewith real data, because it will often steadly increase and not quite stabilize |
+| (b) Marginal gain | Paired ELPD difference between adjacent K, with 2xSE | The step to this K is not worth it: filled points clear 2 SE, open points do not |
+| (c) Reliability | Share of samples with a Pareto k above `pareto_threshold` (default 0.7) | The ELPD estimate at that K cannot be trusted as much ; usually the fit is unstable there anyway |
 | (d) Convergence | Chain agreement after alignment (falls back to `lp__` Rhat) | The chains found genuinely different partitions at that K, more sampling will not fix this |
-| (e) Assignment certainty | Distribution of each sample's largest membership probability, floor-corrected for K | Membership is spreading thin across communities instead of concentrating |
-| (f) Community distinctness | Smallest Aitchison distance between any two fitted compositions | A new community is a near-copy of an existing one, the model is splitting hairs, not finding structure |
+| (e) Assignment certainty | Distribution of each sample's largest membership probability, floor-corrected for K | Membership is spreading thin across communities instead of concentrating. Sometimes when communities are over or under parameterized, assignment certainty will drop  |
+| (f) Community distinctness | Smallest Aitchison distance between any two fitted compositions | Aitchison distance is an apropriate distance metric to compositional data | If a new community is a near-copy of an existing one, the model is splitting hairs, not finding structure |
 
 Panels (a)-(b) ask whether the model predicts better; (c)-(f) ask whether that
 improvement can be trusted and is biologically meaningful. It is common, and
@@ -631,6 +632,21 @@ Mixed bars indicate either genuinely ambiguous samples (samples at community
 boundaries) or label switching (communities are recovered but numbered
 differently from the true labels, a permutation, not an error).
 
+`eDNA_dmm()` already ran `dmm_align_labels()` for you before `fit` was ever
+returned, so cross-chain label switching should
+already be resolved, mixed bars here are more likely genuine ambiguity. The
+one residual case alignment cannot always catch on its own is a single chain
+relabelling *mid-run* (rare, but see `?dmm_align_labels`'s *Why any fit may
+need this* section for when it happens): check `fit$alignment$pct_permuted`
+to see how much relabelling was needed in the first place, and if the
+structure plot still looks wrong where the diagnostics look clean, try
+re-aligning with a different algorithm:
+
+```{r struct_realign, eval=FALSE}
+fit_ecr <- dmm_align_labels(fit, method = "ECR-pivot")
+eDNA_dmm_structure(fit_ecr, metadata = sim$metadata, facet_var = "TrueCommunity")
+```
+
 ```{r struct_row_col_facet}
 # For real data with two grouping variables (e.g., depth stratum x year)
 # facet_row_var creates rows of panels; facet_var creates columns
@@ -681,6 +697,17 @@ the two can be stacked into a single figure whose panels line up exactly. This
 section covers the arguments that matter once a plot stops being a quick look and
 starts being a manuscript figure.
 
+The examples below need a second grouping variable to demonstrate two-way
+faceting (`facet_var` for columns, `facet_row_var` for rows). Our simulated
+data only has one categorical variable of its own, `TrueCommunity`, so `meta`
+adds a second, `depth_bin`, the way you would with any real second grouping
+(site, year, depth stratum, ...):
+
+```{r layout_meta}
+meta <- sim$metadata
+meta$depth_bin <- ifelse(meta$Depth > median(meta$Depth), "deep", "shallow")
+```
+
 ### Two-way panels and why they are built with cowplot
 
 `facet_var` makes panel **columns**; `facet_row_var` makes panel **rows**. When
@@ -696,8 +723,8 @@ both being stretched to equal width.
 eDNA_dmm_structure(
   fit,
   metadata      = meta,
-  facet_var     = "year",        # columns
-  facet_row_var = "depth_bin",   # rows
+  facet_var     = "TrueCommunity",   # columns (use your own second grouping,
+  facet_row_var = "depth_bin",       # rows     e.g. "year" or "site", for real data)
   sort_var      = "Depth"
 )
 ```
@@ -770,7 +797,7 @@ makes a 20-taxon legend scannable.
 
 ### Nesting a plot inside a bigger figure: `panel_labels`
 
-By default each row panel is lettered (a, b, c…). When the plot is itself one
+By default each row panel is lettered (a, b, c...). When the plot is itself one
 panel of a larger composite, turn that off so the inner letters do not collide
 with the outer ones:
 
@@ -792,7 +819,7 @@ taxa <- dmm_taxon_order(fit, top_n = 20)
 
 common <- list(
   metadata      = meta,
-  facet_var     = "year",
+  facet_var     = "TrueCommunity",
   facet_row_var = "depth_bin",
   sort_var      = "Depth",
   row_label_fn  = function(x) paste0(x, " m"),
@@ -932,7 +959,7 @@ species signal in A should share a dominant community color in B. If panel B
 is mostly mixed bars where panel A shows a clear signal, try more MCMC
 iterations or a different K.
 
-### Three-panel: raw → assigned → community signatures (A/B/C figure)
+### Three-panel: raw -> assigned -> community signatures (A/B/C figure)
 
 Adding panel C creates a complete narrative: A shows the raw data, B shows
 which community each sample belongs to, and C shows what each of those
@@ -978,7 +1005,7 @@ cowplot::save_plot(
 )
 ```
 
-> **Tip for real data with `facet_row_var`:** When using depth stratum × year
+> **Tip for real data with `facet_row_var`:** When using depth stratum x year
 > panels, the A/B panels can become very tall. In that case, assemble A and B
 > as one figure and C as a separate supplementary figure, or place A and B
 > side-by-side with `ncol = 2` and C below.
@@ -1061,6 +1088,41 @@ beta_result$table
 # Columns: community, covariate, mean, ci_5, ci_95,
 #          prob_positive, prob_negative, ess, reliability
 ```
+
+### Covariate effects as intervals: `eDNA_dmm_beta_intervals()`
+
+`eDNA_dmm_beta()`'s densities show how far the data moved a coefficient from
+its prior, but reading a density's tail against zero is a squint. This is the
+same coefficients as a coefficient (dot-and-line) plot instead: one row per
+community x covariate, a point estimate, two nested credible intervals, and a
+dashed line at zero, so "does this cross zero" is immediate.
+
+```{r beta_intervals_joint}
+beta_intervals <- eDNA_dmm_beta_intervals(fit)
+beta_intervals$plot
+```
+
+A **filled** point means the outer interval (90% by default) excludes zero, a
+real effect at that credibility level; a **hollow** point means it crosses
+zero. The thick line is the inner interval (50%), the thin line the outer one.
+
+```{r beta_intervals_options}
+# Narrower/wider intervals than the 50%/90% default
+eDNA_dmm_beta_intervals(fit, intervals = c(0.5, 0.95))$plot
+
+# Compare magnitudes across covariates on one shared x scale, instead of each
+# covariate getting its own range (the default, "free_x")
+eDNA_dmm_beta_intervals(fit, facet_scales = "fixed")$plot
+
+# The table behind the plot: one row per coefficient
+beta_intervals$table
+# Columns: community, covariate, estimate, the four interval bounds, excludes_zero
+```
+
+Both `eDNA_dmm_beta()` and `eDNA_dmm_beta_intervals()` take the same
+`reference` argument (see *Interpreting the beta plot* just below), so
+whichever reading you pick, contrast-against-one-community or
+deviation-from-average, is consistent across both plot types.
 
 **Interpreting the beta plot for our simulation:**
 
@@ -1250,9 +1312,9 @@ likelihood, which scales with sample size and K. Practical strategies:
 
 - Use `iter = 2000, warmup = 1000` for exploratory fits, then increase for
   final inference
-- Filter to the top 50–100 taxa by total read count to reduce S without losing
+- Filter to the top 50-100 taxa by total read count to reduce S without losing
   the dominant signal
-- For LOO with K_range = 2:6, plan for roughly 20–40 minutes per K value on a
+- For LOO with K_range = 2:6, plan for roughly 20-40 minutes per K value on a
   modern laptop
 
 ## Function not found after installation

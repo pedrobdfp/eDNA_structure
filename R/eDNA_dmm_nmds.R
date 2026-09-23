@@ -29,8 +29,8 @@
 #' The stress value (a measure of how well 2D positions represent the true
 #' dissimilarities) is shown in the subtitle. Rough guidelines:
 #' - Stress < 0.05: excellent representation
-#' - Stress 0.05–0.10: good
-#' - Stress 0.10–0.20: adequate, but interpret with care
+#' - Stress 0.05-0.10: good
+#' - Stress 0.10-0.20: adequate, but interpret with care
 #' - Stress > 0.20: poor; consider `k = 3` and examining multiple axis pairs
 #'
 #' @section Ellipses:
@@ -140,7 +140,7 @@ eDNA_dmm_nmds <- function(
   K  <- fit$K
   si <- fit$sample_info
 
-  # ── Argument checks ───────────────────────────────────────────────────────────
+  # -- Argument checks -----------------------------------------------------------
   if (!is.numeric(k) || k < 2 || k != round(k)) {
     rlang::abort("`k` must be a positive integer >= 2 (the number of NMDS dimensions).")
   }
@@ -166,12 +166,12 @@ eDNA_dmm_nmds <- function(
     )
   }
 
-  # ── Community colors ──────────────────────────────────────────────────────────
+  # -- Community colors ----------------------------------------------------------
   if (is.null(community_colors)) {
     community_colors <- make_community_colors(K)
   }
 
-  # ── eDNA index transform or relative abundance ────────────────────────────────
+  # -- eDNA index transform or relative abundance --------------------------------
   counts_mat <- fit$counts
   if (use_edna_index) {
     rel      <- counts_mat / rowSums(counts_mat)
@@ -182,7 +182,7 @@ eDNA_dmm_nmds <- function(
     ord_mat  <- counts_mat / rowSums(counts_mat)
   }
 
-  # ── NMDS ──────────────────────────────────────────────────────────────────────
+  # -- NMDS ----------------------------------------------------------------------
   dist_mat <- vegan::vegdist(ord_mat, method = distance)
   set.seed(seed)
   nmds_obj <- vegan::metaMDS(
@@ -195,7 +195,7 @@ eDNA_dmm_nmds <- function(
 
   stress <- nmds_obj$stress
 
-  # ── Scores ────────────────────────────────────────────────────────────────────
+  # -- Scores --------------------------------------------------------------------
   sc        <- vegan::scores(nmds_obj, display = "sites")
   ax_labels <- paste0("NMDS", nmds_axes)
   plot_df   <- data.frame(
@@ -205,7 +205,7 @@ eDNA_dmm_nmds <- function(
   plot_df$z_hat                <- si$z_hat
   plot_df$assignment_certainty <- si$assignment_certainty
 
-  # ── Stress quality message ────────────────────────────────────────────────────
+  # -- Stress quality message ----------------------------------------------------
   stress_label <- dplyr::case_when(
     stress < 0.05  ~ "excellent",
     stress < 0.10  ~ "good",
@@ -213,7 +213,7 @@ eDNA_dmm_nmds <- function(
     TRUE           ~ "poor - consider k=3"
   )
 
-  # ── Build plot ────────────────────────────────────────────────────────────────
+  # -- Build plot ----------------------------------------------------------------
   title_str    <- title    %||% sprintf("NMDS  (K = %d communities)", K)
   subtitle_str <- subtitle
 
@@ -245,7 +245,7 @@ eDNA_dmm_nmds <- function(
       plot.subtitle    = ggplot2::element_text(color = "grey40", size = base_size - 2)
     )
 
-  # ── Ellipses ──────────────────────────────────────────────────────────────────
+  # -- Ellipses ------------------------------------------------------------------
   if (show_ellipse) {
     # Only draw ellipses for communities with >= 3 samples
     comm_counts <- table(plot_df$z_hat)

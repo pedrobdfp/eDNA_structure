@@ -10,7 +10,7 @@
 #' - How environmental covariates (depth, latitude, etc.) drive community membership
 #'
 #' Input can be raw ASV tables, taxonomically-annotated taxon tables, or
-#' any sample × feature count matrix.
+#' any sample x feature count matrix.
 #'
 #' @section Core workflow:
 #' 1. **Fit the model**: [eDNA_dmm()]

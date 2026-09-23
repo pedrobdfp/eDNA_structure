@@ -2,7 +2,7 @@
 
 **Dirichlet-Multinomial Mixture Models for eDNA Metabarcoding Community Structure**
 
-`eDNAstructure` is an R package for fitting Bayesian Dirichlet-Multinomial Mixture (DMM) models to environmental DNA (eDNA) read count data from metabarcoding surveys. Given a sample × taxon count matrix and optional environmental covariates, the model identifies latent ecological communities, estimates their taxonomic compositions, and quantifies how environmental gradients correlate with community membership, all within a fully Bayesian framework with principled uncertainty quantification.
+`eDNAstructure` is an R package for fitting Bayesian Dirichlet-Multinomial Mixture (DMM) models to environmental DNA (eDNA) read count data from metabarcoding surveys. Given a sample x taxon count matrix and optional environmental covariates, the model identifies latent ecological communities, estimates their taxonomic compositions, and quantifies how environmental gradients correlate with community membership, all within a fully Bayesian framework with principled uncertainty quantification.
 
 ---
 
@@ -47,12 +47,12 @@ Installed automatically:
 
 | Package | Purpose |
 |---------|---------|
-| `rstan` (≥ 2.21) | Bayesian inference via Stan |
-| `ggplot2` (≥ 3.4) | All visualizations |
+| `rstan` (>= 2.21) | Bayesian inference via Stan |
+| `ggplot2` (>= 3.4) | All visualizations |
 | `dplyr`, `tidyr` | Data manipulation |
-| `vegan` (≥ 2.6) | NMDS ordination |
-| `posterior` (≥ 1.4) | MCMC diagnostics (ESS, Rhat) |
-| `loo` (≥ 2.6) | Leave-one-out cross-validation |
+| `vegan` (>= 2.6) | NMDS ordination |
+| `posterior` (>= 1.4) | MCMC diagnostics (ESS, Rhat) |
+| `loo` (>= 2.6) | Leave-one-out cross-validation |
 | `scales` | Axis formatting |
 
 ---
@@ -136,12 +136,12 @@ fit <- loo_result$fits[["K4"]]
 
 The model needs **two things**, and only the first is required:
 
-1. **A species/ASV × site table**: the count matrix. This is the only required input.
+1. **A species/ASV x site table**: the count matrix. This is the only required input.
 2. **A covariate table**: *optional*. Supply it only if you want to model how environmental variables drive community membership. `eDNA_dmm()` runs perfectly well without it.
 
 ### Count matrix
 
-The primary input to `eDNA_dmm()` is a **sample × taxon** matrix of non-negative integer read counts:
+The primary input to `eDNA_dmm()` is a **sample x taxon** matrix of non-negative integer read counts:
 
 - **Rows** = samples, one row per sample
 - **Columns** = taxa or ASVs, taxonomic annotation is not required
@@ -167,7 +167,7 @@ count_matrix <- long_df |>
 
 ### Covariate data frame
 
-A **sample × covariate** data frame in the same row order as the count matrix. Covariates are Z-score standardized internally by default.
+A **sample x covariate** data frame in the same row order as the count matrix. Covariates are Z-score standardized internally by default.
 
 ```r
 head(data$metadata)
@@ -307,7 +307,7 @@ p <- eDNA_dmm_structure(
   sort_var         = "Depth",         # sort samples within each panel
   community_colors = NULL,            # named hex vector, e.g. c("Community 1" = "#E63946")
                                       # or NULL for automatic HCL palette
-  bar_width        = 0.9,             # bar width (0–1); 1 = no gaps
+  bar_width        = 0.9,             # bar width (0-1); 1 = no gaps
   x_text           = FALSE,           # show sample ID labels on x-axis?
   base_size        = 11,
   ylab             = "Membership probability",
@@ -388,7 +388,7 @@ result <- eDNA_dmm_nmds(
   ellipse_type     = "t",        # ellipse type: "t" (robust) or "norm" (normal-based)
   community_colors = NULL,       # named hex vector or NULL for automatic palette
   size_range       = c(1.5, 5),  # point size range: c(min, max) mapped to
-                                 # 50% certainty (smallest) → 100% certainty (largest)
+                                 # 50% certainty (smallest) -> 100% certainty (largest)
   alpha            = 0.85,       # point transparency (0 = invisible, 1 = opaque)
   base_size        = 13,
   title            = NULL,
@@ -438,7 +438,7 @@ result$table   # data frame: mean, 90% CI, P(direction), ESS, reliability per co
 A companion to `eDNA_dmm_beta()`. Densities show how far the data moved a
 coefficient from its prior, but the tail of a density is hard to read against
 zero. This draws the same coefficients as a coefficient plot instead: one row
-per community × covariate, a point estimate, two nested credible intervals,
+per community x covariate, a point estimate, two nested credible intervals,
 and a dashed line at zero, so "does this interval cross zero" is a glance, not
 a squint. This is what the Quick Start example above calls.
 
@@ -599,7 +599,7 @@ diagnostics <- eDNA_dmm_k_diagnostics(
 
 Panels (a) and (b) ask whether the model predicts better; (c) through (f) ask
 whether that improvement is trustworthy and interpretable. It is common for
-(a) to keep rising after (d)–(f) have already turned, that gap is exactly the
+(a) to keep rising after (d)-(f) have already turned, that gap is exactly the
 signal that a higher K is buying predictive accuracy at the cost of a
 grouping the data do not actually support. See `?eDNA_dmm_k_diagnostics` for
 the full reasoning behind each panel.
@@ -618,7 +618,7 @@ p <- plot_true_compositions(
   facet_var       = "year",          # column facets
   facet_row_var   = "depth_bin",     # row facets: see "Two-way layouts" below
   sort_var        = "Depth",         # sort samples within each panel
-  top_n           = 20,              # top N taxa individually; rest → "Other"
+  top_n           = 20,              # top N taxa individually; rest -> "Other"
   taxa_include    = NULL,            # or a taxon vector from dmm_taxon_order()
   bar_width       = 0.9,
   base_size       = 11,
@@ -636,7 +636,7 @@ Returns a `ggplot2` object, or a **cowplot grid object** when `facet_row_var` is
 
 `facet_var` makes panel *columns*; `facet_row_var` makes panel *rows*. With `facet_row_var` set, one sub-plot is built per row level and they are stacked with cowplot. That architecture exists for a reason: it is the only one that keeps panel widths proportional to sample count (via `space = "free_x"`), so a stratum with 30 samples is drawn three times wider than one with 10 instead of being stretched to match.
 
-This is the recommended layout for publication figures with two-way structure (e.g. depth stratum × year).
+This is the recommended layout for publication figures with two-way structure (e.g. depth stratum x year).
 
 #### Row labels: `row_label_fn`, `row_label_position`
 
@@ -645,7 +645,7 @@ This is the recommended layout for publication figures with two-way structure (e
 | `row_label_fn` | Function applied to each `facet_row_var` level to build its display label. `function(x) paste0(x, " m")` for depth, `function(x) paste0("Year: ", x)` for year. Default `as.character`. |
 | `row_label_position` | `"title"` (bold label above each row's panel: **new default**) or `"ylab"` (as the y-axis label: the old, hardcoded behavior). |
 | `row_label_size` | Font size of that label. Default `NULL` = `base_size`. |
-| `panel_labels` | Label each row panel with a lowercase letter (a, b, c…). Default `TRUE`. Set `FALSE` when this plot is itself a panel inside a larger composite figure, where the outer figure supplies the letters and an inner set would collide. |
+| `panel_labels` | Label each row panel with a lowercase letter (a, b, c...). Default `TRUE`. Set `FALSE` when this plot is itself a panel inside a larger composite figure, where the outer figure supplies the letters and an inner set would collide. |
 
 `row_label_fn` is what makes the label text generalize across datasets; it is tied to whatever `facet_row_var` means for your data, rather than being hardcoded.
 
@@ -721,11 +721,11 @@ p <- eDNA_dmm_compositions(
   title           = NULL,
   subtitle        = NULL,
   legend_position = "right", # "right", "bottom", "left", "top", or "none"
-  bar_width       = 0.7      # bar width (0–1)
+  bar_width       = 0.7      # bar width (0-1)
 )
 ```
 
-Returns a `ggplot2` object. The x-axis labels show community numbers (1, 2, 3…). Pair with `eDNA_dmm_structure()` to connect community identities to sample assignments.
+Returns a `ggplot2` object. The x-axis labels show community numbers (1, 2, 3...). Pair with `eDNA_dmm_structure()` to connect community identities to sample assignments.
 
 ---
 
@@ -766,9 +766,9 @@ A small, deliberately plain example: a site-by-taxon count table plus the two nu
 ```r
 data <- get_example_data()
 
-data$counts       # integer matrix, 20 sites × 32 taxa (rows = sites)
-data$covariates   # data frame, 20 × 2: Depth, Distance_shore: numeric only
-data$metadata     # data frame, 20 × 4: sample_id, TrueCommunity, Depth, Distance_shore
+data$counts       # integer matrix, 20 sites x 32 taxa (rows = sites)
+data$covariates   # data frame, 20 x 2: Depth, Distance_shore: numeric only
+data$metadata     # data frame, 20 x 4: sample_id, TrueCommunity, Depth, Distance_shore
 ```
 
 That's the whole object, three elements. It goes straight into the model with nothing to subset:
@@ -814,9 +814,9 @@ sim <- simulate_eDNA_survey(
   n_communities             = 4,           # number of communities K
   n_species                 = 40,          # number of species S
   samples_per_community     = 5,           # sampling stations per community
-  community_covariate_means = NULL,        # K × P matrix of covariate means per community
-                                           # NULL = default 2-covariate depth × shore design
-  covariate_sds             = NULL,        # K × P SDs (NULL = 5 for all)
+  community_covariate_means = NULL,        # K x P matrix of covariate means per community
+                                           # NULL = default 2-covariate depth x shore design
+  covariate_sds             = NULL,        # K x P SDs (NULL = 5 for all)
   mean_read_depth           = 10000,       # mean reads per sample
   bio_reps                  = 1,           # biological replicates per station
   seq_reps                  = 1,           # sequencing technical replicates per bio rep
@@ -835,7 +835,7 @@ Or run each step individually for full control:
 community_mat   <- generate_community_compositions(
   n_communities     = 4,
   n_species         = 40,
-  n_dominant_range  = c(2, 3),     # 2–3 high-frequency dominant species per community
+  n_dominant_range  = c(2, 3),     # 2-3 high-frequency dominant species per community
   n_unique_low_freq = 4,           # species present only in one community
   community_groups  = c(1,2,1,2),  # group structure for shared species
   n_group_shared    = 4,           # species shared within each group
@@ -902,9 +902,9 @@ sample_metadata <- generate_sample_covariates(
 
 For sample *i*, the DMM marginalizes over a latent community assignment *z*_i:
 
-1. **Compositions**: π_k ~ Dirichlet(conc · **1**_S) for k = 1…K
-2. **Membership**: P(*z*_i = k) = softmax(β_0k + β_1k · x_1i + … + β_Pk · x_Pi), with β centred so the K coefficients sum to zero for each covariate (no reference community; see [Covariate coefficients have no reference community](#edna_dmm-fit-the-dmm))
-3. **Counts**: **x**_i | *z*_i = k ~ DirichletMultinomial(N_i, α · π_k)
+1. **Compositions**: π_k ~ Dirichlet(conc * **1**_S) for k = 1...K
+2. **Membership**: P(*z*_i = k) = softmax(β_0k + β_1k * x_1i + ... + β_Pk * x_Pi), with β centred so the K coefficients sum to zero for each covariate (no reference community; see [Covariate coefficients have no reference community](#edna_dmm-fit-the-dmm))
+3. **Counts**: **x**_i | *z*_i = k ~ DirichletMultinomial(N_i, α * π_k)
 
 The global overdispersion α absorbs both technical (PCR, sequencing) and ecological compositional variance. Marginalizing over *z*_i makes inference exact.
 
@@ -941,7 +941,7 @@ Yes. The model treats each column as a compositional unit and does not use taxon
 Pass it as a numeric column. But if you have only a few discrete years, the linearity assumption may be too strong, consider fitting without year and testing it post-hoc via multinomial regression on the posterior assignments.
 
 **The first run takes forever, is something wrong?**
-No. Stan compiles the model to C++ on the first call after installation (1–2 minutes). All subsequent calls skip compilation. This is normal behavior for any rstan-based package.
+No. Stan compiles the model to C++ on the first call after installation (1-2 minutes). All subsequent calls skip compilation. This is normal behavior for any rstan-based package.
 
 ---
 

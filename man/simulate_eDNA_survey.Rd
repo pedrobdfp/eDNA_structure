@@ -27,12 +27,12 @@ simulate_eDNA_survey(
 
 \item{samples_per_community}{Integer. Default \code{3}.}
 
-\item{community_covariate_means}{A \verb{K × P} matrix of covariate means per
+\item{community_covariate_means}{A \verb{K x P} matrix of covariate means per
 community. Rows = communities, columns = covariates. If \code{NULL} (default),
-a two-covariate (Depth × Distance_shore) design with four well-separated
+a two-covariate (Depth x Distance_shore) design with four well-separated
 communities is used.}
 
-\item{covariate_sds}{A \verb{K × P} matrix of covariate SDs, or \code{NULL} for
+\item{covariate_sds}{A \verb{K x P} matrix of covariate SDs, or \code{NULL} for
 SD = 5 on all. Default \code{NULL}.}
 
 \item{mean_read_depth}{Numeric. Mean reads per sample. Default \code{10000}.}

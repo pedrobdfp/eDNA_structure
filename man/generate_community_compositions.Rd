@@ -76,7 +76,7 @@ background species appears in a given community. Default \code{0.4}.}
 \item{seed}{An integer random seed for reproducibility, or \code{NULL}. Default \code{NULL}.}
 }
 \value{
-A numeric matrix \verb{K × S} of community compositions (rows sum to 1).
+A numeric matrix \verb{K x S} of community compositions (rows sum to 1).
 Row names are \code{"Community_1"} through \code{"Community_K"}. Column names are
 \code{"Sp_1"} through \code{"Sp_S"}. The matrix carries attributes documenting which
 species are dominants, uniques, group-shared, shared, and absent per community.

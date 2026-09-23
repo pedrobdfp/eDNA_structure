@@ -15,11 +15,11 @@ generate_sample_covariates(
 \item{contributors_list}{A list of contributor data frames from
 \code{\link[=generate_contributors]{generate_contributors()}} (the \verb{$contributors_list} element).}
 
-\item{community_covariates}{A \verb{K × P} numeric matrix of community-specific
+\item{community_covariates}{A \verb{K x P} numeric matrix of community-specific
 covariate means. Row k gives the mean covariate values for community k.
 Column names become covariate names.}
 
-\item{covariate_sds}{A \verb{K × P} numeric matrix of standard deviations, or
+\item{covariate_sds}{A \verb{K x P} numeric matrix of standard deviations, or
 \code{NULL} (default) to use SD = 5 for all covariates and communities.}
 
 \item{seed}{An integer random seed, or \code{NULL}. Default \code{NULL}.}

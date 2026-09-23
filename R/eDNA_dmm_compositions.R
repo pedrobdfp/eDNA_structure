@@ -72,14 +72,14 @@ eDNA_dmm_compositions <- function(
   if (is.null(taxa_names))
     taxa_names <- paste0("Sp_", seq_len(ncol(pi_mean)))
   
-  # ── Which taxa to show ─────────────────────────────────────────────────────
+  # -- Which taxa to show -----------------------------------------------------
   # Ranked by total posterior weight across communities. To make a companion
   # plot_true_compositions() figure use the SAME colours, pass this same set to
   # its `taxa_include` argument: see dmm_taxon_order().
   top_taxa   <- dmm_taxon_order(fit, top_n)
   other_taxa <- setdiff(taxa_names, top_taxa)
   
-  # ── Structured color palette: identical to plot_true_compositions() ───────
+  # -- Structured color palette: identical to plot_true_compositions() -------
   named_taxa <- sort(top_taxa)
   n_named    <- length(named_taxa)
   tax_colors <- make_taxa_colors(named_taxa,
@@ -87,7 +87,7 @@ eDNA_dmm_compositions <- function(
   
   taxon_levels <- c(sort(top_taxa), if (length(other_taxa) > 0) "Other")
   
-  # ── Build long data frame ──────────────────────────────────────────────────
+  # -- Build long data frame --------------------------------------------------
   comp_df <- as.data.frame(pi_mean)
   colnames(comp_df) <- taxa_names
   comp_df$Community <- as.character(seq_len(K))
@@ -105,11 +105,11 @@ eDNA_dmm_compositions <- function(
   plot_long$taxon     <- factor(plot_long$taxon, levels = taxon_levels)
   plot_long$Community <- factor(plot_long$Community, levels = as.character(seq_len(K)))
   
-  # ── Titles ─────────────────────────────────────────────────────────────────
+  # -- Titles -----------------------------------------------------------------
   title_str    <- title    %||% sprintf("Posterior community compositions  (K = %d)", K)
   subtitle_str <- subtitle
   
-  # ── Plot ───────────────────────────────────────────────────────────────────
+  # -- Plot -------------------------------------------------------------------
   ggplot2::ggplot(
     plot_long,
     ggplot2::aes(x = .data$Community, y = .data$proportion, fill = .data$taxon)

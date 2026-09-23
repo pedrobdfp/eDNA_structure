@@ -129,7 +129,7 @@ eDNA_dmm_structure <- function(
   si        <- fit$sample_info
   prob_cols <- paste0("prob_comm", seq_len(K))
 
-  # ── Community colors ──────────────────────────────────────────────────────
+  # -- Community colors ------------------------------------------------------
   if (is.null(community_colors)) {
     community_colors <- make_community_colors(K)
   } else {
@@ -140,7 +140,7 @@ eDNA_dmm_structure <- function(
                      i = paste0("Missing: ", paste(missing_comms, collapse = ", "))))
   }
 
-  # ── Merge metadata ────────────────────────────────────────────────────────
+  # -- Merge metadata --------------------------------------------------------
   if (!is.null(metadata)) {
     if (!is.data.frame(metadata))
       rlang::abort("`metadata` must be a data frame.")
@@ -156,7 +156,7 @@ eDNA_dmm_structure <- function(
                 all.x = TRUE, sort = FALSE)
   }
 
-  # ── Validate ──────────────────────────────────────────────────────────────
+  # -- Validate --------------------------------------------------------------
   for (v in c(facet_var, facet_row_var, sort_var, vline_var)) {
     if (!is.null(v) && !v %in% names(si))
       rlang::abort(paste0("'", v, "' not found in merged data. Available: ",
@@ -165,11 +165,11 @@ eDNA_dmm_structure <- function(
   if (!is.null(vline_var) && !is.numeric(si[[vline_var]]))
     rlang::abort("`vline_var` must be numeric.")
 
-  # ── Titles ────────────────────────────────────────────────────────────────
+  # -- Titles ----------------------------------------------------------------
   title_str    <- title    %||% sprintf("Posterior Community Assignments  (K = %d)", K)
   subtitle_str <- subtitle %||% ""
 
-  # ── Core single-panel builder ─────────────────────────────────────────────
+  # -- Core single-panel builder ---------------------------------------------
   # Uses sample_id as discrete x within each subset: gapless bars guaranteed.
   build_panel <- function(dat, row_label = NULL, show_legend = FALSE,
                           show_ylab = TRUE) {
@@ -273,13 +273,13 @@ eDNA_dmm_structure <- function(
     p
   }
 
-  # ── No row facet: single ggplot ───────────────────────────────────────────
+  # -- No row facet: single ggplot -------------------------------------------
   if (is.null(facet_row_var)) {
     p <- build_panel(si, show_legend = show_legend)
     return(p + ggplot2::labs(title = title_str, subtitle = subtitle_str))
   }
 
-  # ── Row facet: cowplot assembly ───────────────────────────────────────────
+  # -- Row facet: cowplot assembly -------------------------------------------
   row_levels <- if (is.factor(si[[facet_row_var]])) levels(si[[facet_row_var]]) else
     sort(unique(si[[facet_row_var]]))
 

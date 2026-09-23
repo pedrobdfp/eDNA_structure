@@ -6,7 +6,7 @@
 
 #' @keywords internal
 validate_counts <- function(counts, call = rlang::caller_env()) {
-  # ── Type check ──────────────────────────────────────────────────────────────
+  # -- Type check --------------------------------------------------------------
   if (!is.matrix(counts) && !is.data.frame(counts)) {
     rlang::abort(
       c(
@@ -37,7 +37,7 @@ validate_counts <- function(counts, call = rlang::caller_env()) {
     counts <- as.matrix(counts)
   }
 
-  # ── Dimension check ─────────────────────────────────────────────────────────
+  # -- Dimension check ---------------------------------------------------------
   if (nrow(counts) < 3) {
     rlang::abort(
       c(
@@ -59,7 +59,7 @@ validate_counts <- function(counts, call = rlang::caller_env()) {
     )
   }
 
-  # ── Value checks ─────────────────────────────────────────────────────────────
+  # -- Value checks -------------------------------------------------------------
   if (any(counts < 0, na.rm = TRUE)) {
     rlang::abort(
       c(
@@ -87,7 +87,7 @@ validate_counts <- function(counts, call = rlang::caller_env()) {
     )
   }
 
-  # ── Zero-row samples ─────────────────────────────────────────────────────────
+  # -- Zero-row samples ---------------------------------------------------------
   row_sums <- rowSums(counts)
   empty_samples <- which(row_sums == 0)
   if (length(empty_samples) > 0) {
@@ -104,7 +104,7 @@ validate_counts <- function(counts, call = rlang::caller_env()) {
     )
   }
 
-  # ── Warn about suspiciously low read counts ───────────────────────────────────
+  # -- Warn about suspiciously low read counts -----------------------------------
   low_samples <- which(row_sums < 100)
   if (length(low_samples) > 0) {
     rlang::warn(
@@ -116,7 +116,7 @@ validate_counts <- function(counts, call = rlang::caller_env()) {
     )
   }
 
-  # ── All-zero taxa ─────────────────────────────────────────────────────────────
+  # -- All-zero taxa -------------------------------------------------------------
   col_sums <- colSums(counts)
   zero_taxa <- which(col_sums == 0)
   if (length(zero_taxa) > 0) {
@@ -133,7 +133,7 @@ validate_counts <- function(counts, call = rlang::caller_env()) {
     )
   }
 
-  # ── Storage mode ──────────────────────────────────────────────────────────────
+  # -- Storage mode --------------------------------------------------------------
   if (!is.integer(counts)) {
     if (!all(counts == floor(counts), na.rm = TRUE)) {
       rlang::warn(
@@ -158,12 +158,12 @@ validate_covariates <- function(covariates, counts, scale_covariates,
   # than inferring it from `counts`.
   N <- n_expected %||% nrow(counts)
 
-  # ── NULL means intercept-only model ──────────────────────────────────────────
+  # -- NULL means intercept-only model ------------------------------------------
   if (is.null(covariates)) {
     return(matrix(numeric(0), nrow = N, ncol = 0))
   }
 
-  # ── Type ──────────────────────────────────────────────────────────────────────
+  # -- Type ----------------------------------------------------------------------
   if (!is.matrix(covariates) && !is.data.frame(covariates)) {
     rlang::abort(
       c(
@@ -192,7 +192,7 @@ validate_covariates <- function(covariates, counts, scale_covariates,
     covariates <- as.matrix(covariates)
   }
 
-  # ── Dimension alignment ───────────────────────────────────────────────────────
+  # -- Dimension alignment -------------------------------------------------------
   if (nrow(covariates) != N) {
     rlang::abort(
       c(
@@ -204,7 +204,7 @@ validate_covariates <- function(covariates, counts, scale_covariates,
     )
   }
 
-  # ── Missing values ────────────────────────────────────────────────────────────
+  # -- Missing values ------------------------------------------------------------
   if (any(is.na(covariates))) {
     n_na <- sum(is.na(covariates))
     na_cols <- colnames(covariates)[apply(covariates, 2, anyNA)]
@@ -220,7 +220,7 @@ validate_covariates <- function(covariates, counts, scale_covariates,
     )
   }
 
-  # ── Near-zero variance covariates ─────────────────────────────────────────────
+  # -- Near-zero variance covariates ---------------------------------------------
   col_vars <- apply(covariates, 2, var)
   zero_var <- which(col_vars < .Machine$double.eps * 100)
   if (length(zero_var) > 0) {
@@ -237,7 +237,7 @@ validate_covariates <- function(covariates, counts, scale_covariates,
     )
   }
 
-  # ── Scaling ───────────────────────────────────────────────────────────────────
+  # -- Scaling -------------------------------------------------------------------
   if (scale_covariates) {
     scaled <- scale(covariates)
     attr(scaled, "scale_center") <- attr(scaled, "scaled:center")

@@ -17,7 +17,7 @@ estimates:
 }
 
 Input can be raw ASV tables, taxonomically-annotated taxon tables, or
-any sample × feature count matrix.
+any sample x feature count matrix.
 }
 \section{Core workflow}{
 

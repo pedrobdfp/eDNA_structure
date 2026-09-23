@@ -43,7 +43,7 @@ plot_true_compositions(
 )
 }
 \arguments{
-\item{counts}{A numeric matrix or data frame of read counts (samples × taxa).}
+\item{counts}{A numeric matrix or data frame of read counts (samples x taxa).}
 
 \item{metadata}{An optional data frame with one row per sample.}
 

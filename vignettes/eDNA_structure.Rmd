@@ -34,7 +34,7 @@ central question the model answers is:
 
 The model is appropriate whenever you have:
 
-- A matrix of read counts (samples × taxa or samples × ASVs)
+- A matrix of read counts (samples x taxa or samples x ASVs)
 - Two or more sampling locations
 - An interest in whether samples cluster into distinct assemblage types
 - Optionally: environmental covariates you believe drive that clustering
@@ -113,7 +113,7 @@ Before fitting a model, it helps to understand exactly what format the
 functions expect. We will use the built-in example dataset to illustrate.
 The model needs **two things**, and only the first is required:
 
-1. **A species/ASV × site table**: the count matrix.
+1. **A species/ASV x site table**: the count matrix.
 2. **A covariate table**: *optional*. Supply it only if you want to model how
    environmental variables drive community membership. `eDNA_dmm()` runs
    perfectly well without one.
@@ -167,7 +167,7 @@ fit <- eDNA_dmm(counts, covariates = covariates, K = 4)  # with them
 
 ## The count matrix
 
-The most important input is a **sample × taxon count matrix**. The function
+The most important input is a **sample x taxon count matrix**. The function
 `eDNA_dmm()` accepts:
 
 - A `matrix` with non-negative integer values
@@ -207,16 +207,16 @@ fitting. The model handles composition estimation internally.
 
 | Requirement | What happens if violated |
 |-------------|--------------------------|
-| All values ≥ 0 | Error with informative message |
+| All values >= 0 | Error with informative message |
 | No NA values | Error with informative message |
 | No all-zero rows | Error: empty samples cannot be modelled |
 | At least 2 columns | Error |
 | Integer values | Warning, then automatic coercion |
-| Row sums ≥ 100 | Warning (very low counts = unreliable compositions) |
+| Row sums >= 100 | Warning (very low counts = unreliable compositions) |
 
 ## The covariate data frame
 
-The second input (optional) is a **sample × covariate** matrix or data frame.
+The second input (optional) is a **sample x covariate** matrix or data frame.
 If you pass covariates, the model will estimate how each covariate shifts the
 probability that a sample belongs to each community.
 
@@ -321,7 +321,7 @@ fit_k2 <- eDNA_dmm(
 
 When you run this, you will see Stan's sampling progress printed to the
 console. This is normal. Four chains of 4000 iterations (2000 warmup)
-typically takes 1–5 minutes depending on N and S.
+typically takes 1-5 minutes depending on N and S.
 
 ```r
 ## Fitting DMM: N=20 samples, S=32 taxa, K=2 communities, P=2 covariates
@@ -392,7 +392,7 @@ summary(fit_k2)
 
 The summary prints:
 
-1. **Alpha (overdispersion)**: typical values for eDNA data are 1–5.
+1. **Alpha (overdispersion)**: typical values for eDNA data are 1-5.
    High alpha (>10) means counts are nearly multinomial (low overdispersion).
    Low alpha (~1) means very high overdispersion, typical for eDNA.
 
@@ -401,7 +401,7 @@ The summary prints:
    Near 100% means one solution was found repeatedly; well below that means
    the chains disagree about the grouping itself.
 
-3. **Assignment certainty**: the fraction of samples with ≥80% posterior
+3. **Assignment certainty**: the fraction of samples with >=80% posterior
    probability of belonging to one community. High certainty (>90%) means the
    communities are well-separated.
 
@@ -718,7 +718,7 @@ beta_result$table
 The **reliability** column classifies each coefficient based on its
 effective sample size (ESS):
 - `"trustworthy"`: ESS > 400, use these with confidence
-- `"cautious"`: ESS 100–400, treat as indicative, not definitive
+- `"cautious"`: ESS 100-400, treat as indicative, not definitive
 - `"unreliable"`: ESS < 100, do not interpret; run longer chains
 
 ```{r beta_save}
@@ -861,7 +861,7 @@ samples: `counts <- counts[rowSums(counts) >= 1000, ]`
 
 ## Compilation takes a long time
 
-Stan compiles the model to C++ code the first time. This takes 30–120 seconds
+Stan compiles the model to C++ code the first time. This takes 30-120 seconds
 but only happens once. On subsequent calls, rstan uses the cached compiled
 model (set `rstan_options(auto_write = TRUE)` to ensure caching).
 

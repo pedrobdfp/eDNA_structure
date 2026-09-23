@@ -114,8 +114,8 @@ The stress value (a measure of how well 2D positions represent the true
 dissimilarities) is shown in the subtitle. Rough guidelines:
 \itemize{
 \item Stress < 0.05: excellent representation
-\item Stress 0.05–0.10: good
-\item Stress 0.10–0.20: adequate, but interpret with care
+\item Stress 0.05-0.10: good
+\item Stress 0.10-0.20: adequate, but interpret with care
 \item Stress > 0.20: poor; consider \code{k = 3} and examining multiple axis pairs
 }
 }

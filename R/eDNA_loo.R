@@ -138,7 +138,7 @@ eDNA_loo <- function(
       if (!is.null(path)) saveRDS(fit, path)
     }
 
-    # ── Predictive score: pooled, and each chain on its own ──────────────────
+    # -- Predictive score: pooled, and each chain on its own ------------------
     ll_all <- loo::extract_log_lik(fit$stan_fit, parameter_name = "log_lik")
     lo     <- loo::loo(ll_all)
     loo_list[[i]] <- lo
@@ -169,7 +169,7 @@ eDNA_loo <- function(
                "`loo_by_chain` rather than `elpd_pooled`."),
         k, elpd_pooled, min(ch_elpd)), call. = FALSE)
 
-    # ── Did the chains find the same solution? ───────────────────────────────
+    # -- Did the chains find the same solution? -------------------------------
     al <- fit$alignment
     dg <- al$diagnostics
     grab <- function(q, col) {

@@ -17,7 +17,7 @@ generate_contributors(
 )
 }
 \arguments{
-\item{community_compositions}{A \verb{K × S} community composition matrix from
+\item{community_compositions}{A \verb{K x S} community composition matrix from
 \code{\link[=generate_community_compositions]{generate_community_compositions()}}.}
 
 \item{samples_per_community}{A positive integer: number of independent samples
@@ -57,7 +57,7 @@ columns \code{SampleID}, \code{TrueCommunity}, \code{ContributorID}, \code{Speci
 }
 }
 \description{
-For each community × sample replicate combination, draws a set of individual
+For each community x sample replicate combination, draws a set of individual
 organisms (contributors) whose species are sampled from the community's
 frequency vector. Each contributor is assigned a body size and a distance
 from the sampler. Species flagged as grouped (schooling) share distances

@@ -182,7 +182,7 @@ eDNA_dmm <- function(
       i = 'Install it with install.packages("label.switching").'
     ))
 
-  # ── Input validation ────────────────────────────────────────────────────────
+  # -- Input validation --------------------------------------------------------
   counts <- validate_counts(counts)
   N      <- nrow(counts)
   K      <- validate_K(K, N)
@@ -205,7 +205,7 @@ eDNA_dmm <- function(
   if (!is.numeric(alpha_rate) || alpha_rate <= 0)
     rlang::abort("`alpha_rate` must be a positive number.")
 
-  # ── Covariate scaling, recorded before the attributes are stripped ──────────
+  # -- Covariate scaling, recorded before the attributes are stripped ----------
   scale_info <- NULL
   P <- ncol(covariates)
   if (scale_covariates && P > 0) {
@@ -220,7 +220,7 @@ eDNA_dmm <- function(
   covariate_names <- if (P > 0) colnames(covariates) else character(0)
   sample_ids      <- rownames(counts)
 
-  # ── Stan data ───────────────────────────────────────────────────────────────
+  # -- Stan data ---------------------------------------------------------------
   stan_data <- list(
     N           = N,                    # number of samples
     S           = S,                    # number of taxa
@@ -233,7 +233,7 @@ eDNA_dmm <- function(
     alpha_rate  = alpha_rate            # Gamma prior rate for alpha
   )
 
-  # ── Sampling ────────────────────────────────────────────────────────────────
+  # -- Sampling ----------------------------------------------------------------
   # Chains are independent, so one core each by default. Running them
   # sequentially multiplies wall time by `chains` for no benefit.
   if (is.null(cores))
@@ -266,7 +266,7 @@ eDNA_dmm <- function(
 
   if (verbose) .print_hmc_diagnostics(stan_fit)
 
-  # ── Assemble the fit ────────────────────────────────────────────────────────
+  # -- Assemble the fit --------------------------------------------------------
   # Community-indexed values here are provisional: they are computed before
   # alignment, and dmm_align_labels() replaces every one of them below.
   cp_mean <- apply(rstan::extract(stan_fit, pars = "community_probs")[[1]],
@@ -306,10 +306,10 @@ eDNA_dmm <- function(
     ),
     class = c("edna_dmm_fit", "list"))
 
-  # ── Align labels, then rebuild every community-indexed quantity ─────────────
+  # -- Align labels, then rebuild every community-indexed quantity -------------
   fit <- dmm_align_labels(fit, method = method, verbose = verbose)
 
-  # ── Diagnostics that survive alignment ──────────────────────────────────────
+  # -- Diagnostics that survive alignment --------------------------------------
   dg  <- fit$alignment$diagnostics
   bad <- dg$rhat > rhat_threshold | dg$ess < ess_threshold
   if (any(bad)) {

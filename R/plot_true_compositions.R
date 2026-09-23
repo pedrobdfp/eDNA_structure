@@ -18,7 +18,7 @@
 #' proportional-width panels, the only architecture that keeps panel widths
 #' proportional to sample count via space = "free_x".
 #'
-#' @param counts A numeric matrix or data frame of read counts (samples × taxa).
+#' @param counts A numeric matrix or data frame of read counts (samples x taxa).
 #' @param metadata An optional data frame with one row per sample.
 #' @param sample_id_col Column in `metadata` matching `rownames(counts)`.
 #'   Default `"sample_id"`.
