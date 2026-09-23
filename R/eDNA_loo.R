@@ -330,5 +330,11 @@ eDNA_loo <- function(
 #'
 #' @export
 get_example_data <- function() {
-  example_edna
+  # `example_edna` is a lazy-loaded dataset: it lives in the *attached*
+  # package environment, not in the package namespace, so an unqualified
+  # reference here would resolve through the search path and could be
+  # shadowed by any object of the same name sitting in the caller's global
+  # environment (e.g. a leftover from an old R session/workspace). Using
+  # `::` forces the lookup to the package's own copy.
+  eDNAstructure::example_edna
 }

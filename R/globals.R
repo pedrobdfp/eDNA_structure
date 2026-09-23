@@ -7,8 +7,6 @@
 # =============================================================================
 
 utils::globalVariables(c(
-  # bundled dataset object
-  "example_edna",
   # bare column names referenced in dplyr/tidyr NSE
   "x_label",
   "cape_x",
