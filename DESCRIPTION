@@ -4,18 +4,24 @@ Version: 0.1.0
 Authors@R: 
     person("Pedro", "Brandao-Dias", email = "pbdfp@uw.edu", role = c("aut", "cre"))
 Description: Fits Bayesian Dirichlet-Multinomial Mixture (DMM) models to
-    environmental DNA (eDNA) read count data from metabarcoding surveys. The model
-    identifies latent ecological communities, estimates their taxonomic compositions,
-    and quantifies how environmental covariates (e.g., depth, latitude) drive
-    community membership. Stan is used for posterior inference. Visualization
-    functions produce publication-ready ggplot2 objects for community structure
-    plots, NMDS ordinations, and covariate coefficient plots.
+    environmental DNA (eDNA) read count data from metabarcoding surveys. The
+    model identifies latent ecological communities, estimates their taxonomic
+    compositions, and quantifies how environmental covariates such as depth or
+    latitude drive community membership. Inference is performed with Stan.
+    Because a mixture likelihood is unchanged by permuting its components,
+    chains can label the same communities differently; community labels are
+    therefore aligned across draws automatically, and diagnostics are reported
+    that distinguish disagreement about labels from disagreement about the
+    grouping itself. Visualization functions produce publication-ready ggplot2
+    objects for community structure plots, composition plots, NMDS ordinations
+    and covariate coefficient plots.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 Depends:
     R (>= 4.1.0)
 Imports:
+    label.switching,
     rstan (>= 2.21.0),
     ggplot2 (>= 3.4.0),
     dplyr (>= 1.1.0),

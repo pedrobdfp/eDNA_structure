@@ -30,28 +30,6 @@ test_that("get_example_data() covariates go straight into eDNA_dmm()", {
   expect_no_error(validate_covariates(d$covariates, d$counts, TRUE))
 })
 
-test_that("get_example_replicates() returns the correct structure", {
-  r <- get_example_replicates()
-  expect_type(r, "list")
-  expect_named(r, c("counts", "replication", "covariates", "metadata"),
-               ignore.order = TRUE)
-
-  expect_true(is.matrix(r$counts))
-  expect_type(r$counts, "integer")
-  expect_type(r$replication, "character")
-  expect_equal(length(r$replication), nrow(r$counts))
-
-  n_stations <- length(unique(r$replication))
-  expect_gt(nrow(r$counts), n_stations)          # more rows than stations
-  expect_equal(nrow(r$covariates), n_stations)   # covariates are station-level
-  expect_equal(nrow(r$metadata), n_stations)
-
-  expect_true(all(vapply(r$covariates, is.numeric, logical(1))))
-
-  # Replication is balanced at 3 bottles per station
-  expect_true(all(table(r$replication) == 3L))
-})
-
 test_that("validate_counts() catches bad inputs", {
   # Non-matrix input
   expect_error(validate_counts("hello"), "must be a numeric matrix")
@@ -135,17 +113,3 @@ test_that("shipped raw CSVs split into the documented tables", {
   expect_true(all(vapply(covariates, is.numeric, logical(1))))
 })
 
-test_that("shipped replicate CSV carries a replication column", {
-  path <- system.file("extdata", "example_edna_replicates_raw.csv",
-                      package = "eDNAstructure")
-  expect_true(nzchar(path))
-
-  raw <- utils::read.csv(path, check.names = FALSE)
-  expect_true(all(c("replicate_id", "replication") %in% names(raw)))
-  expect_equal(nrow(raw), 60L)
-  expect_equal(length(unique(raw$replication)), 20L)
-
-  # Covariates are constant within a station, so collapsing gives one row each
-  cov <- unique(raw[, c("replication", "Depth", "Distance_shore")])
-  expect_equal(nrow(cov), 20L)
-})

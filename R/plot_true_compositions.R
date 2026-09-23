@@ -60,6 +60,9 @@
 #'   and laid out hue block by hue block, so a legend of `n_hues` columns puts
 #'   roughly one colour family per column. Default `7`.
 #' @param bar_width Width of each bar, in units of one x slot. Default `0.9`,
+#' @param panel_spacing Numeric. Horizontal gap between facet panels, in
+#'   lines. Default `0.3`. Increase it when panels hold few bars, where the
+#'   default reads as narrower than the gaps between the bars themselves.
 #'   which leaves a thin white gutter so individual samples stay countable.
 #'   Use `1` for a gapless STRUCTURE-style block.
 #' @param ylab Shared y-axis label drawn once beside the panel stack, used only
@@ -115,6 +118,7 @@ plot_true_compositions <- function(
     legend_rel_width   = 0.2,
     n_hues             = 7,
     bar_width          = 0.9,
+    panel_spacing      = 0.3,
     ylab               = "Proportion",
     strip_text_size    = NULL,
     row_label_size     = NULL,
@@ -267,7 +271,7 @@ plot_true_compositions <- function(
         axis.ticks.x     = ggplot2::element_blank(),
         strip.background = ggplot2::element_blank(),
         strip.text       = ggplot2::element_text(face = "bold", size = strip_text_size %||% base_size),
-        panel.spacing.x  = ggplot2::unit(0.3, "lines"),
+        panel.spacing.x  = ggplot2::unit(panel_spacing, "lines"),
         plot.title       = ggplot2::element_text(face = "bold", size = row_label_size %||% base_size, hjust = 0),
         plot.subtitle    = ggplot2::element_text(color = "grey40", size = base_size - 2)
       )

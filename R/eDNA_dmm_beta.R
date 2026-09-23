@@ -57,6 +57,16 @@
 #' @param show_intercept Logical. If `FALSE` (the default), the intercept
 #'   coefficient is excluded from the plot (it is rarely of direct interest).
 #'   Set to `TRUE` to include it.
+#' @param reference How the coefficients are identified for display.
+#'   `"none"` (default) centres them across communities, so each
+#'   value is that community's deviation from the average community and all
+#'   `K` communities are drawn. An integer instead reads every
+#'   coefficient as a contrast against that community, which is then omitted
+#'   as the reference. `NULL` uses the fit's own `beta_reference` if it has one.
+#'
+#'   Changing this requires no refitting. The softmax is invariant to adding
+#'   a constant across communities, so the choice is a normalisation applied
+#'   to the finished draws, not an estimate.
 #' @param beta_prior_sd A positive number: the standard deviation of the
 #'   Normal(0, `beta_prior_sd`) prior used on beta coefficients in the Stan
 #'   model. Default is `1.0`. This **must match** the `to_vector(beta) ~ normal(0, sd)`
@@ -117,6 +127,7 @@ eDNA_dmm_beta <- function(
     covariates_to_plot  = NULL,
     show_intercept      = FALSE,
     beta_prior_sd       = 1.0,
+    reference           = "none",
     n_prior_samples     = 20000,
     community_colors    = NULL,
     prior_color         = "grey60",
@@ -149,13 +160,12 @@ eDNA_dmm_beta <- function(
     community_colors <- make_community_colors(K)
   }
 
-  # ── Pull raw beta draws ───────────────────────────────────────────────────────
+  # ── Beta draws (relabelled and re-referenced by dmm_beta_draws) ──────────────
   # Auto-annotate only when K=2 (one community, no overlap)
   if (is.null(show_annotations)) {
     show_annotations <- (K == 2)
   }
   
-  beta_mat    <- as.matrix(fit$stan_fit, pars = "beta")
 
   cov_labels  <- c("intercept", fit$covariate_names)
 
@@ -185,20 +195,36 @@ eDNA_dmm_beta <- function(
   }
 
   # ── Build posterior long data frame ───────────────────────────────────────────
+  # Draws come through dmm_beta_draws() rather than straight off the stan_fit,
+  # so that a relabelled fit and any change of reference community are both
+  # honoured. Reading the raw draws here would silently disagree with
+  # eDNA_dmm_beta_intervals() on the same fit.
+  # reference = "none" centres across communities instead of subtracting one,
+  # so each value is the average of that community's contrasts against all the
+  # others and every community is drawn. See eDNA_dmm_beta_intervals().
+  centred <- identical(reference, "none")
+  ref_use <- if (centred) NULL
+             else if (!is.null(reference)) reference else fit$beta_reference
+  d <- dmm_beta_draws(fit)
+  if (!is.null(fit$community_order))
+    d <- d[, fit$community_order, , drop = FALSE]
+  if (centred) {
+  } else if (!is.null(ref_use)) {
+    r <- d[, ref_use, , drop = FALSE]
+    for (k in seq_len(dim(d)[2])) d[, k, ] <- d[, k, ] - r[, 1, ]
+  }
+  ref_idx <- if (centred) NA_integer_
+             else if (!is.null(ref_use)) as.integer(ref_use) else K
+
   posterior_rows <- vector("list", (K - 1) * length(all_cov_labels))
   idx <- 1L
-  cov_j_map <- stats::setNames(seq_along(cov_labels), cov_labels)
-
-  for (comm_i in seq_len(K - 1)) {
+  for (comm_i in seq_len(K)) {
+    if (!is.na(ref_idx) && comm_i == ref_idx) next   # reference row is zero
     for (cov_name in all_cov_labels) {
-      cov_j  <- cov_j_map[[cov_name]]
-      pname  <- sprintf("beta[%d,%d]", comm_i, cov_j)
-      if (!pname %in% colnames(beta_mat)) next
-      draws  <- beta_mat[, pname]
       posterior_rows[[idx]] <- data.frame(
         community = paste0("Community ", comm_i),
         covariate = cov_name,
-        value     = draws,
+        value     = d[, comm_i, cov_name],
         source    = "Posterior",
         stringsAsFactors = FALSE
       )
@@ -227,12 +253,10 @@ eDNA_dmm_beta <- function(
   if (show_annotations) {
     ann_rows <- vector("list", (K - 1) * length(all_cov_labels))
     idx <- 1L
-    for (comm_i in seq_len(K - 1)) {
+    for (comm_i in seq_len(K)) {
+      if (!is.na(ref_idx) && comm_i == ref_idx) next
       for (cov_name in all_cov_labels) {
-        cov_j  <- cov_j_map[[cov_name]]
-        pname  <- sprintf("beta[%d,%d]", comm_i, cov_j)
-        if (!pname %in% colnames(beta_mat)) next
-        draws  <- beta_mat[, pname]
+        draws  <- d[, comm_i, cov_name]
         p_dir  <- max(mean(draws > 0), mean(draws < 0))
         ann_rows[[idx]] <- data.frame(
           community = paste0("Community ", comm_i),
@@ -254,10 +278,11 @@ eDNA_dmm_beta <- function(
 
   # ── Build plot ────────────────────────────────────────────────────────────────
   # Color map: communities + "Prior" as grey
-  comm_names    <- paste0("Community ", seq_len(K - 1))
+  comm_names    <- setdiff(paste0("Community ", seq_len(K)),
+                           if (is.na(ref_idx)) character(0) else paste0("Community ", ref_idx))
   color_map     <- c(community_colors[comm_names], Prior = prior_color)
   alpha_map_vec <- c(
-    stats::setNames(rep(posterior_alpha, K - 1), comm_names),
+    stats::setNames(rep(posterior_alpha, length(comm_names)), comm_names),
     Prior = prior_alpha
   )
 

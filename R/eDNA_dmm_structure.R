@@ -39,6 +39,9 @@
 #'   Default `NULL` (ggplot chooses).
 #' @param legend_key_size Size (cm) of each legend color swatch. Default `0.4`.
 #' @param bar_width Width of each bar, in units of one x slot. Default `0.9`,
+#' @param panel_spacing Numeric. Horizontal gap between facet panels, in
+#'   lines. Default `0.3`. Increase it when panels hold few bars, where the
+#'   default reads as narrower than the gaps between the bars themselves.
 #'   which leaves a thin white gutter so individual samples stay countable
 #'   and matches [plot_true_compositions()]. Use `1` for a gapless block.
 #' @param legend_rel_height Height of a top or bottom legend, as a fraction of
@@ -103,6 +106,7 @@ eDNA_dmm_structure <- function(
     legend_rel_height   = 0.1,
     legend_rel_width    = 0.2,
     bar_width           = 0.9,
+    panel_spacing       = 0.3,
     strip_text_size     = NULL,
     row_label_size      = NULL,
     ylab                = "Membership probability",
@@ -240,7 +244,7 @@ eDNA_dmm_structure <- function(
         legend.key.size  = ggplot2::unit(legend_key_size, "cm"),
         legend.text      = if (!is.null(legend_text_size)) ggplot2::element_text(size = legend_text_size) else ggplot2::element_text(),
         axis.text.y      = ggplot2::element_text(size = axis_text_size %||% base_size),
-        panel.spacing.x  = ggplot2::unit(0.3, "lines"),
+        panel.spacing.x  = ggplot2::unit(panel_spacing, "lines"),
         strip.background = ggplot2::element_blank(),
         strip.text       = ggplot2::element_text(face = "bold", size = strip_text_size %||% base_size),
         plot.title       = ggplot2::element_text(face = "bold", size = row_label_size %||% base_size, hjust = 0),
@@ -332,7 +336,7 @@ eDNA_dmm_structure <- function(
 
   legend_plot <- build_panel(si, show_legend = TRUE) +
     ggplot2::theme(legend.position = legend_position) +
-    ggplot2::guides(fill = ggplot2::guide_legend())
+    ggplot2::guides(fill = ggplot2::guide_legend(nrow = legend_nrow, ncol = legend_ncol))
 
   if (legend_position == "right") {
     legend_grob <- cowplot::get_plot_component(legend_plot, "guide-box-right", return_all = TRUE)

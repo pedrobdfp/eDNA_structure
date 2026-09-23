@@ -6,16 +6,13 @@
 # This avoids the Rcpp Module / RCPP_MODULE Windows DLL export issue entirely:
 # there is no precompiled module baked into the package's compiled code.
 #
-# The package ships two Stan programs:
-#   "dmm": the standard model, one row per sample (inst/stan/dmm.stan)
-#   "dmm_rep": the replicate-aware hierarchical model (inst/stan/dmm_rep.stan)
-# Each is compiled and cached independently, the first time it is actually used,
-# so users who never pass `replication` never pay to compile "dmm_rep".
+# The package ships one Stan program, "dmm" (inst/stan/dmm.stan). It is
+# compiled the first time it is used and cached thereafter.
 
 .eDNA_stanmodels_cache <- new.env(parent = emptyenv())
 
 # Stan programs shipped in inst/stan, without the .stan extension.
-.eDNA_stan_model_names <- c("dmm", "dmm_rep")
+.eDNA_stan_model_names <- c("dmm")
 
 #' @keywords internal
 .stanmodel_cache_path <- function(name) {
@@ -85,9 +82,8 @@
 #' Clear the cached compiled Stan models
 #'
 #' @description
-#' Forces recompilation of the Stan models on next use. Useful after updating
-#' the package, or if a cached model becomes stale/corrupted. Clears both the
-#' standard model and the replicate-aware model.
+#' Forces recompilation of the Stan model on next use. Useful after updating
+#' the package, or if a cached model becomes stale or corrupted.
 #'
 #' @return Invisibly `NULL`, called for its side effect.
 #'
