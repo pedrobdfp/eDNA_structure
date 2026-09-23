@@ -482,6 +482,53 @@ loo_result$loo_table
 > curve. This can reveal whether apparent K > 1 is driven by spatial
 > heterogeneity rather than true community structure.
 
+## The full picture: `eDNA_dmm_k_diagnostics()`
+
+The elbow plot above is one view of "how many communities." ELPD almost
+always keeps improving as K grows, a more flexible mixture fits anything
+better, so on its own it rarely gives a clean stopping point.
+`eDNA_dmm_k_diagnostics()` draws the fuller picture: up to six panels, side by
+side, that fail in different ways on purpose. No single panel picks K; the
+point is that together they usually make the choice obvious.
+
+```{r k_diagnostics}
+k_diag <- eDNA_dmm_k_diagnostics(
+  fits        = loo_result$fits,        # named list of edna_dmm_fit, one per K
+  K_values    = 2:5,
+  level       = "advanced",             # "advanced" (default, 6 panels) or "simple" (2 panels)
+  elpd_by_run = loo_result$loo_by_chain, # per-chain ELPD, straight from eDNA_loo()
+  convergence = loo_result$loo_table    # lp_rhat / min_agreement, straight from eDNA_loo()
+)
+
+k_diag$plot     # the assembled figure
+k_diag$table    # one row per K, every panel's numbers in one place
+```
+
+**What each panel is asking:**
+
+| Panel | Question | A drop or flattening here means |
+|---|---|---|
+| (a) Predictive fit | LOO ELPD vs. K, averaged over chains | Rarely informative alone, this is the ambiguous panel |
+| (b) Marginal gain | Paired ELPD difference between adjacent K, with 2×SE | The step to this K is not worth it: filled points clear 2 SE, open points do not |
+| (c) Reliability | Share of samples with a Pareto k above `pareto_threshold` (default 0.7) | The ELPD estimate at that K cannot be trusted; usually the fit is unstable there anyway |
+| (d) Convergence | Chain agreement after alignment (falls back to `lp__` Rhat) | The chains found genuinely different partitions at that K, more sampling will not fix this |
+| (e) Assignment certainty | Distribution of each sample's largest membership probability, floor-corrected for K | Membership is spreading thin across communities instead of concentrating |
+| (f) Community distinctness | Smallest Aitchison distance between any two fitted compositions | A new community is a near-copy of an existing one, the model is splitting hairs, not finding structure |
+
+Panels (a)-(b) ask whether the model predicts better; (c)-(f) ask whether that
+improvement can be trusted and is biologically meaningful. It is common, and
+diagnostic, for (a) to keep climbing after (d)-(f) have already turned: that
+gap is exactly a higher K buying predictive accuracy at the cost of a grouping
+the data do not actually support. When all of them agree on a K, as they
+should for well-separated ground truth like this example dataset, that K is
+your answer with real confidence, not just the top of an elbow plot.
+
+For datasets with more fits than convenient to hold in memory, `fits` also
+accepts a function `function(k) ...` that loads each fit on demand, e.g. from
+`save_dir` files written by `eDNA_loo()`. See `?eDNA_dmm_k_diagnostics` for
+the full reasoning behind every panel, including the `"simple"` two-panel mode
+for a quick first look.
+
 ## Extracting the best model from LOO results
 
 The `loo_result` object stores all fitted models internally. You do not need

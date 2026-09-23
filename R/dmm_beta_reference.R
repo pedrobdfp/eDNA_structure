@@ -7,34 +7,37 @@
 #'
 #' @description
 #' Returns the full `K x (P+1)` coefficient matrix for every posterior draw,
-#' including the reference community's row of zeros, optionally re-expressed
-#' against a different reference community.
+#' by default in the **centred** parameterization [eDNA_dmm()] actually fits
+#' (each community's coefficient is its deviation from the average community,
+#' nothing is fixed at zero), optionally re-expressed as a contrast against a
+#' chosen reference community instead.
 #'
-#' Every beta coefficient is a **contrast**: community `k` relative to the
-#' reference. [eDNA_dmm()] fixes the last community as the reference, which is
-#' an arbitrary choice made for identifiability. Which community you want to
-#' compare against is an interpretive decision, and it usually differs from the
-#' one the sampler happened to number last — the clearest reading often comes
-#' from referencing the most distinct community, so that every other
-#' coefficient states a contrast with it.
+#' The softmax is invariant to adding a constant to all communities within a
+#' covariate, so centred and reference-coded views are the same model in
+#' different coordinates. Passing `reference` re-expresses every coefficient
+#' as community `k` relative to that one community, which then becomes exactly
+#' zero (contrast coding). This is sometimes an easier reading than the
+#' default deviation-from-average view, e.g. contrasting every community
+#' against the most distinct one.
 #'
-#' Changing the reference requires **no refitting**. A softmax is invariant to
-#' adding a constant to all communities within a covariate, so the reference is
-#' a normalisation rather than an estimate: subtracting community `j`'s row from
-#' every row moves the zero and leaves the model untouched. Doing it on the
-#' draws rather than on the summaries means the intervals carry their
-#' uncertainty across correctly.
+#' Changing the reference requires **no refitting**: subtracting community
+#' `j`'s row from every row moves the zero and leaves the model untouched.
+#' Doing it on the draws rather than on the summaries means the intervals
+#' carry their uncertainty across correctly.
 #'
 #' @param fit An `edna_dmm_fit` object from [eDNA_dmm()].
-#' @param reference Integer community index to use as the reference, or `NULL`
-#'   (default) to keep the fitted one (community `K`).
+#' @param reference Integer community index to re-express the coefficients
+#'   against (that community's row becomes exactly zero), or `NULL` (default)
+#'   to keep the fitted centred parameterization, in which every community
+#'   has a real, generally nonzero coefficient.
 #' @param n_draws Maximum number of posterior draws to return, or `NULL`
 #'   (default) for all of them.
 #'
 #' @return A numeric array with dimensions `draws x K x (P+1)`. The second
 #'   dimension is named `"Community 1" ... "Community K"`, the third
-#'   `c("intercept", fit$covariate_names)`. The reference community's slice is
-#'   exactly zero.
+#'   `c("intercept", fit$covariate_names)`. With `reference` set, that
+#'   community's slice is exactly zero; otherwise every slice generally has a
+#'   nonzero value (the centred parameterization has no fixed-zero row).
 #'
 #' @seealso [eDNA_dmm_beta()] and [eDNA_dmm_beta_intervals()], which both take
 #'   a `reference` argument and use this internally.

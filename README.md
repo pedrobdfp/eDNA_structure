@@ -29,7 +29,8 @@ library(rstan)
 example(stan_model, package = "rstan", run.dontrun = TRUE)
 ```
 
-If you see sampling output without errors, Stan is ready. Full guide: <https://mc-stan.org/rstan/articles/rstan.html>
+If you see sampling output without errors, Stan is ready. Stan can be a little annoying to install, but they have an excellent guide:
+Full guide: <https://mc-stan.org/rstan/articles/rstan.html>
 
 ### Step 3: Install eDNAstructure
 
@@ -38,7 +39,7 @@ install.packages("remotes")
 remotes::install_github("pedrobdfp/eDNA_structure", upgrade = "never")
 ```
 
-During installation, a large amount of black text will appear; this is the Stan model compiling to C++. It only happens once. Every subsequent call to `eDNA_dmm()` goes straight to sampling with no compilation output.
+During installation, a large amount of black text may appear; this is the Stan model compiling to C++. It only happens once. Every subsequent call to `eDNA_dmm()` goes straight to sampling with no compilation output.
 
 ### Dependencies
 
@@ -57,40 +58,41 @@ Installed automatically:
 ---
 
 ## Quick start
-
+A quick look at the core package functions
 ```r
 library(eDNAstructure)
 
 # The built-in example: a site-by-taxon count table plus two numeric covariates
 data <- get_example_data()
 
-data$counts[1:3, 1:5]   # 20 sites x 33 taxa: this is all the model needs
+data$counts[1:3, 1:5]   # 20 sites x 32 taxa: this is all the model needs
 head(data$covariates)   # Depth, Distance_shore (numeric only)
 
-# Look at the raw composition before fitting anything
+# Look at the raw (observed) composition before fitting anything
 plot_true_compositions(
   data$counts,
   metadata  = data$metadata,      # labelling columns live here
-  facet_var = "TrueCommunity"
+  facet_var = "TrueCommunity",
+  show_legend        = TRUE
 )
 
 # Fit the model for a given number of communities (K)
+# This is the main function of the package, which fits the DMM model to the data.
 fit <- eDNA_dmm(
   counts     = data$counts,
   covariates = data$covariates,   # goes in as-is, nothing to subset
   K          = 4
 )
 
+# Some useful summaries
 print(fit)
 summary(fit)
 
-# Did the four chains find the same communities, or just agree on names?
-fit$alignment$min_agreement
-fit$alignment$lp_rhat
-
 # Plot the results
+# First the structure plot. Its default is to plot the exact same way as plot_true_compositions() for easy comparison.
+# Note that the community labels are arbitrary
 eDNA_dmm_structure(fit, metadata = data$metadata,
-                   facet_var = "TrueCommunity", sort_var = "Depth")
+                   facet_var = "TrueCommunity", sort_var = "Depth")			   
 eDNA_dmm_compositions(fit)   # what each community looks like in species space
 eDNA_dmm_nmds(fit)$plot      # ordination, colored by assignment
 eDNA_dmm_beta_intervals(fit)$plot  # covariate effects, with credible intervals
@@ -98,14 +100,30 @@ eDNA_dmm_beta_intervals(fit)$plot  # covariate effects, with credible intervals
 
 ### Choosing K
 
+In the example dataset, the true number of communities we have simulated is k=4. However, this will be unknown for any real dataset. So, the first step in inference is figuring out how many communities there are.
 ```r
+# This function will call eDNA_dmm() and fit the data with several different Ks, and then compare the fits with LOO.
+# This is computationally demanding and may take several minutes
 loo_result <- eDNA_loo(data$counts, data$covariates, K_range = 2:5)
+# You will see some warnings associated with k=3 and k=5. This may happen when K is blatantly incorrect, which may cause the model to not converge.
 loo_result$plot        # ELPD against K, unfilled where chains disagreed
+
+# eDNA_dmm_k_diagnostics() is the fuller picture behind that one elbow plot:
+# six panels (predictive fit, marginal gain, reliability, convergence,
+# assignment certainty, community distinctness) that fail in different ways,
+# so K is rarely ambiguous once you see them together.
+diagnostics <- eDNA_dmm_k_diagnostics(
+  loo_result$fits, K_values = 2:5,
+  elpd_by_run = loo_result$loo_by_chain,
+  convergence = loo_result$loo_table
+)
+diagnostics$plot
 
 # Predictive fit and identifiability are separate questions:
 loo_result$loo_table[, c("K", "elpd", "lp_rhat", "min_agreement", "identified")]
 
 # All fitted models are stored: no need to refit
+# So when you decide K=4 is the correct one, you don't have to run eDNA_dmm() again for that. 
 fit <- loo_result$fits[["K4"]]
 ```
 
@@ -158,10 +176,10 @@ The primary input to `eDNA_dmm()` is a **sample × taxon** matrix of non-negativ
 
 ```r
 data$counts[1:3, 1:5]
-#          Sp_1  Sp_2  Sp_3  Sp_4  Sp_5
-# STN_001   412   310   121    73     0
-# STN_002   389   275    98    61    14
-# STN_003    52    41   487   312   208
+#         Sp_1 Sp_2 Sp_3 Sp_4 Sp_7
+# STN_001 2054 1794  780  717 1087
+# STN_002  620 3256 1492    0    0
+# STN_003  192 3306    0    0    0
 ```
 
 If your data are in long format, convert them first:
@@ -180,10 +198,11 @@ A **sample × covariate** data frame in the same row order as the count matrix. 
 
 ```r
 head(data$metadata)
-#   sample_id  TrueCommunity  Depth  Distance_shore
-# 1   STN_001              1     82             198
-# 2   STN_002              1     79             204
-# 3   STN_003              2     11             197
+#   sample_id TrueCommunity Depth Distance_shore
+# 1   STN_001             1  83.6            137
+# 2   STN_002             1  63.7            137
+# 3   STN_003             1  66.8            148
+```
 
 ---
 
@@ -270,6 +289,33 @@ the finished draws:
 eDNA_dmm_beta_intervals(fit)                  # deviation from the average
 eDNA_dmm_beta_intervals(fit, reference = 3)   # contrasts against community 3
 ```
+
+---
+
+### `dmm_align_labels()`: Re-align labels yourself
+
+`eDNA_dmm()` calls this automatically; you should not normally need it. It
+exists for the cases where you do: re-aligning with a different `method` to
+sanity-check the default, or aligning a fit that was assembled by hand from a
+raw `stanfit` outside `eDNA_dmm()`.
+
+```r
+aligned <- dmm_align_labels(
+  fit,
+  method  = "STEPHENS",   # "STEPHENS" (default), "ECR-pivot", or "ECR-iterative"
+  verbose = TRUE
+)
+
+aligned$alignment$pct_permuted   # % of draws that were relabelled
+aligned$alignment$min_agreement  # smallest pairwise chain agreement, post-alignment
+```
+
+`"STEPHENS"` minimises KL divergence against the mean membership matrix using
+full membership probabilities, and is the most reliable of the three.
+`"ECR-pivot"` anchors to the highest-density draw's allocation. `"ECR-iterative"`
+is faster but can settle into a local optimum where draws are aligned within
+groups but mismatched between them, symptoms that look exactly like residual
+non-convergence; prefer `"STEPHENS"` unless you have a specific reason not to.
 
 ---
 
@@ -394,6 +440,8 @@ result <- eDNA_dmm_beta(
                                    # "separate": one row per community, one column per covariate
   covariates_to_plot = NULL,       # character vector of covariate names to include, or NULL for all
   show_intercept     = FALSE,      # include the intercept term?
+  reference          = "none",     # "none" (default): centred, deviation from the average community;
+                                   # an integer instead contrasts against that community
   beta_prior_sd      = 1.0,        # prior SD: must match the Stan model (default: Normal(0,1))
   n_prior_samples    = 4000,       # prior draws for the density curve (more = smoother)
   community_colors   = NULL,       # named hex vector or NULL
@@ -412,6 +460,72 @@ result$table   # data frame: mean, 90% CI, P(direction), ESS, reliability per co
 
 ---
 
+### `eDNA_dmm_beta_intervals()`: Covariate effects as a coefficient plot
+
+A companion to `eDNA_dmm_beta()`. Densities show how far the data moved a
+coefficient from its prior, but the tail of a density is hard to read against
+zero. This draws the same coefficients as a coefficient plot instead: one row
+per community × covariate, a point estimate, two nested credible intervals,
+and a dashed line at zero, so "does this interval cross zero" is a glance, not
+a squint. This is what the Quick Start example above calls.
+
+```r
+result <- eDNA_dmm_beta_intervals(
+  fit,
+  covariates_to_plot = NULL,       # character vector of covariate names, or NULL for all
+  show_intercept     = FALSE,
+  intervals          = c(0.5, 0.9), # inner (thick) and outer (thin) interval widths
+  reference          = "none",      # "none" (default): centred, deviation from the average community;
+                                    # an integer instead contrasts against that community
+  point_est          = "median",    # "median" (default) or "mean"
+  community_colors   = NULL,
+  color_by_community = TRUE,
+  facet_scales       = "free_x",    # or "fixed" to compare magnitudes across covariates
+  point_size         = 2.8,
+  linewidth_inner    = 1.6,
+  linewidth_outer    = 0.6,
+  base_size          = 13,
+  title              = NULL,
+  subtitle           = NULL
+)
+
+result$plot    # ggplot2 object
+result$table   # data frame: community, covariate, estimate, interval bounds, excludes_zero
+```
+
+A **filled** point means the outer interval excludes zero (a real effect,
+given the chosen credibility level); a **hollow** point means it crosses zero.
+
+---
+
+### `dmm_beta_draws()`: Raw posterior draws of the beta coefficients
+
+What `eDNA_dmm_beta()` and `eDNA_dmm_beta_intervals()` call internally to get
+the `reference` argument's re-centering right. Use it directly when you want
+the coefficient draws themselves, e.g. to compute a custom summary, rather
+than a plot.
+
+```r
+d <- dmm_beta_draws(
+  fit,
+  reference = NULL,   # NULL (default): the fitted centred draws, every community
+                      # has a real, generally nonzero coefficient; an integer
+                      # instead re-expresses everything as a contrast against
+                      # that community, which becomes exactly zero
+  n_draws   = NULL    # cap the number of draws returned, or NULL for all
+)
+
+dim(d)                        # draws x K x (P+1); third dim named "intercept", covariate names
+colMeans(d[, , "Depth"])      # posterior mean Depth effect per community
+```
+
+Changing `reference` needs **no refitting**: a softmax is invariant to adding
+a constant to every community within a covariate, so this is a normalisation
+of the finished draws, not a re-estimate, applied on the draws (not the
+summaries) so intervals carry their uncertainty across correctly.
+
+---
+
 ### `eDNA_loo()`: K selection via LOO cross-validation
 
 Fits models across a range of K values and compares them using Leave-One-Out cross-validation. Returns an elbow plot and a comparison table to guide K selection.
@@ -422,7 +536,8 @@ loo_result <- eDNA_loo(
   covariates       = my_covs,
   K_range          = 2:5,        # integer vector of K values to evaluate
   scale_covariates = TRUE,
-  chains           = 1,
+  chains           = 4,          # per K; their labels are aligned automatically, like eDNA_dmm()
+  method           = "STEPHENS", # label alignment algorithm
   iter             = 4000,
   warmup           = 2000,
   adapt_delta      = 0.95,
@@ -430,14 +545,78 @@ loo_result <- eDNA_loo(
   conc             = 0.5,
   alpha_shape      = 5,
   alpha_rate       = 2,
+  save_dir         = NULL,       # directory to cache each fit as fit_K<k>.rds, resumable
+  keep_fits        = TRUE,       # FALSE releases each fit after scoring: flat memory for long sweeps
   verbose          = TRUE
 )
 
 loo_result$plot        # LOO-ELPD elbow plot (higher = better; look for the elbow)
-loo_result$loo_table   # data frame: K, LOO-ELPD, SE
+loo_result$loo_table   # data frame: one row per K, elpd/se plus convergence diagnostics
+loo_result$loo_by_chain # data frame: one row per chain per K; feeds eDNA_dmm_k_diagnostics()
 loo_result$loo_compare # loo::loo_compare() output
-loo_result$fits        # named list of edna_dmm_fit objects, one per K
+loo_result$fits        # named list of edna_dmm_fit objects, one per K (e.g. loo_result$fits[["K4"]])
 ```
+
+**Predictive fit and identifiability are separate questions.** ELPD almost
+always keeps improving as K grows, a more flexible mixture fits anything
+better, so it rarely stops on its own. `loo_table$identified` (built from
+`lp_rhat` and `min_agreement`) says whether the chains at that K actually
+agreed on a single grouping of the samples; an ELPD gain at a K that isn't
+identified isn't a model you can report. Read both columns together:
+
+```r
+loo_result$loo_table[, c("K", "elpd", "lp_rhat", "min_agreement", "identified")]
+max(loo_result$loo_table$K[loo_result$loo_table$identified])   # largest identified K
+```
+
+---
+
+### `eDNA_dmm_k_diagnostics()`: The full picture for choosing K
+
+`eDNA_loo()`'s elbow plot is one view of "how many communities." This function
+is the rest of the view: six panels, side by side, that fail in different ways
+on purpose, so K is rarely ambiguous once you see all of them together. No
+single panel picks K; the point is that they usually agree.
+
+```r
+diagnostics <- eDNA_dmm_k_diagnostics(
+  fits        = loo_result$fits,        # named list of edna_dmm_fit, or a function(k) for on-disk fits
+  K_values    = 2:5,
+  level       = "advanced",             # "advanced" (default, 6 panels) or "simple" (2 panels)
+  elpd_by_run = loo_result$loo_by_chain, # per-chain ELPD, straight from eDNA_loo()
+  convergence = loo_result$loo_table,   # lp_rhat / min_agreement, straight from eDNA_loo()
+
+  pareto_threshold    = 0.7,  # Pareto k above which a sample's LOO contribution is unreliable
+  rhat_threshold       = 1.1, # lp__ Rhat above which a K is flagged unconverged
+  agreement_threshold  = 0.9, # reference line for chain agreement
+  certainty_threshold  = 0.8, # membership probability counted as "confidently assigned"
+  distance             = "aitchison", # or "tv"; distance between community compositions
+  base_size            = 12
+)
+
+diagnostics$plot     # the assembled 6-panel figure
+diagnostics$panels   # panels (a) to (f) individually, for custom layouts
+diagnostics$table    # one row per K: elpd_mean/sd, pct_pareto_bad, min_agreement, lp_rhat,
+                      # min_distance, mean/median/q10_certainty, mean_excess, pct_confident
+```
+
+**The panels, left to right, top to bottom:**
+
+| Panel | Question | Deteriorates when |
+|---|---|---|
+| (a) Predictive fit | Does adding a community improve held-out prediction (ELPD)? | Rarely on its own, this is the ambiguous one |
+| (b) Marginal gain | Is the *step* from K-1 to K worth it, paired to cancel sample noise? | The gain falls within ~2 SE of zero |
+| (c) Reliability | Can (a) and (b) be trusted? Share of samples with Pareto k above threshold | Too many samples are individually influential at that K |
+| (d) Convergence | Did the chains at that K find the *same* grouping? | Chain agreement drops, or `lp__` Rhat exceeds `rhat_threshold` |
+| (e) Assignment certainty | Are samples confidently assigned, or spread thin across communities? | Membership probabilities flatten toward 1/K |
+| (f) Community distinctness | Is the newest community actually different from the others? | The smallest between-community distance collapses toward 0 |
+
+Panels (a) and (b) ask whether the model predicts better; (c) through (f) ask
+whether that improvement is trustworthy and interpretable. It is common for
+(a) to keep rising after (d)–(f) have already turned, that gap is exactly the
+signal that a higher K is buying predictive accuracy at the cost of a
+grouping the data do not actually support. See `?eDNA_dmm_k_diagnostics` for
+the full reasoning behind each panel.
 
 ---
 
@@ -596,12 +775,12 @@ Note this is deliberately **not** the same ranking as mean observed frequency ac
 
 ### `get_example_data()`: Built-in example dataset
 
-A small, deliberately plain example: a site-by-taxon count table plus the two numeric covariates that separate the communities. 20 sites, 33 taxa, 4 true communities.
+A small, deliberately plain example: a site-by-taxon count table plus the two numeric covariates that separate the communities. 20 sites, 32 taxa, 4 true communities.
 
 ```r
 data <- get_example_data()
 
-data$counts       # integer matrix, 20 sites × 33 taxa (rows = sites)
+data$counts       # integer matrix, 20 sites × 32 taxa (rows = sites)
 data$covariates   # data frame, 20 × 2: Depth, Distance_shore: numeric only
 data$metadata     # data frame, 20 × 4: sample_id, TrueCommunity, Depth, Distance_shore
 ```
@@ -615,7 +794,7 @@ eDNA_dmm_structure(fit, metadata = data$metadata, facet_var = "TrueCommunity")
 
 **Why `covariates` and `metadata` are separate.** `eDNA_dmm()` requires every covariate column to be numeric; it will try to fit whatever you hand it. So an identifier like `sample_id`, or a ground-truth label like `TrueCommunity`, cannot live in `covariates`. The plotting functions want exactly those labelling columns. Keeping the two apart means both calls work as written, with no subsetting.
 
-> **Why 33 taxa and not 40?** The simulation draws 40 species, but taxa with zero reads across every sample are dropped from `counts`; they carry no information and the model rejects all-zero columns.
+> **Why 32 taxa and not 40?** The simulation draws 40 species, but taxa with zero reads across every sample are dropped from `counts`; they carry no information and the model rejects all-zero columns.
 
 The simulation's internal tables (contributor lists, per-organism shedding, raw long-format reads) are **not** shipped. They are an implementation detail of `simulate_eDNA_survey()`, not an example of what eDNA data look like. Call [`simulate_eDNA_survey()`](#simulation-pipeline) directly if you want them.
 
@@ -709,10 +888,16 @@ metab_df <- simulate_metabarcoding(
 sample_metadata <- generate_sample_covariates(
   contributors_list    = contrib_obj$contributors_list,
   community_covariates = matrix(           # community-specific covariate means
-    c(80, 200, 10, 200, 80, 20, 10, 20),
+    c(70, 140, 40, 140, 70, 100, 40, 100),
     nrow = 4, byrow = TRUE,
     dimnames = list(NULL, c("Depth", "Distance_shore"))
-  )
+  ),
+  covariate_sds = matrix(6:8, nrow = 4, ncol = 2, byrow = TRUE)  # Depth SD=6, Distance_shore SD=8
+  # Keep the gap between community means a moderate multiple (~5x) of the SD:
+  # enough to separate communities cleanly without making covariates
+  # (quasi-)perfectly separating, which starves the softmax regression of
+  # gradient and produces poor chain mixing. Also keep every mean well clear
+  # of 0 so sampling noise can't produce a physically impossible negative value.
 )
 ```
 
@@ -732,7 +917,7 @@ sample_metadata <- generate_sample_covariates(
 For sample *i*, the DMM marginalizes over a latent community assignment *z*_i:
 
 1. **Compositions**: π_k ~ Dirichlet(conc · **1**_S) for k = 1…K
-2. **Membership**: P(*z*_i = k) = softmax(β_0k + β_1k · x_1i + … + β_Pk · x_Pi), community K = reference
+2. **Membership**: P(*z*_i = k) = softmax(β_0k + β_1k · x_1i + … + β_Pk · x_Pi), with β centred so the K coefficients sum to zero for each covariate (no reference community; see [Covariate coefficients have no reference community](#edna_dmm-fit-the-dmm))
 3. **Counts**: **x**_i | *z*_i = k ~ DirichletMultinomial(N_i, α · π_k)
 
 The global overdispersion α absorbs both technical (PCR, sequencing) and ecological compositional variance. Marginalizing over *z*_i makes inference exact.

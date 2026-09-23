@@ -708,20 +708,26 @@ simulate_eDNA_survey <- function(
 ) {
   set.seed(seed)
 
-  # Default covariate design for 4 communities (2x2: depth x shore)
+  # Default covariate design for 4 communities (2x2: depth x shore). The gap
+  # between community means is kept a moderate multiple (~5x) of the default
+  # covariate_sds (5): enough to separate communities cleanly without making
+  # them (quasi-)perfectly separable, which starves the softmax regression of
+  # gradient and produces poor chain mixing. Every mean also stays well clear
+  # of 0, so sampling noise cannot produce a physically impossible negative
+  # value for a covariate like depth.
   if (is.null(community_covariate_means)) {
     if (n_communities == 4) {
       community_covariate_means <- matrix(
-        c(80, 200,
-          10, 200,
-          80,  20,
-          10,  20),
+        c(70, 140,
+          40, 140,
+          70, 100,
+          40, 100),
         nrow = 4, byrow = TRUE,
         dimnames = list(NULL, c("Depth", "Distance_shore"))
       )
     } else {
       # Generic: space communities evenly along depth axis
-      depths  <- seq(10, 200, length.out = n_communities)
+      depths  <- seq(40, 160, length.out = n_communities)
       community_covariate_means <- matrix(
         c(depths, rep(100, n_communities)),
         nrow = n_communities,

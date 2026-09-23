@@ -122,15 +122,22 @@ what the model assumed before seeing the data.
 data. One color per community.
 }
 
-Interpret:
+By default (\code{reference = "none"}) every coefficient is that community's
+\emph{deviation from the average community} on that covariate, there is no
+reference community and all \code{K} communities are drawn. Interpret:
 \itemize{
-\item \strong{Posterior >> 0}: this community is more likely at high values of the
-covariate (relative to the reference community).
-\item \strong{Posterior << 0}: this community is less likely at high values of the
-covariate.
+\item \strong{Posterior >> 0}: this community becomes more likely, relative to the
+average community, at high values of the covariate.
+\item \strong{Posterior << 0}: this community becomes less likely, relative to the
+average community, at high values of the covariate.
 \item \strong{Posterior ≈ prior}: the data do not constrain this coefficient; the
 covariate may not predict community membership.
 }
+
+Pass an integer \code{reference} to instead read every coefficient as a contrast
+against that one community (which is then omitted, having been re-expressed
+as exactly zero); the sign interpretation above is the same, just measured
+against that community instead of the average.
 }
 
 \section{Coefficient table}{

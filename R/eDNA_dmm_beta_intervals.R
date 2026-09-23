@@ -16,15 +16,20 @@
 #' and by how much.
 #'
 #' @section Reading the plot:
-#' Each row is one coefficient, relative to the reference community:
+#' Each row is one coefficient. By default (`reference = "none"`) it is that
+#' community's *deviation from the average community* on that covariate, all
+#' `K` communities are drawn and there is no reference community; pass an
+#' integer `reference` to read every coefficient as a contrast against that
+#' one community instead (see `@param reference` below).
 #' - The **thick line** is the inner interval (50% by default).
 #' - The **thin line** is the outer interval (90% by default).
 #' - The **point** is filled when the outer interval excludes zero and hollow
 #'   when it crosses zero.
 #'
 #' A coefficient whose outer interval lies entirely above zero means the
-#' community becomes more likely as the covariate increases, relative to the
-#' reference community; entirely below zero means less likely.
+#' community becomes more likely as the covariate increases, relative to
+#' whatever the coefficient is measured against (the average community, or the
+#' chosen `reference`); entirely below zero means less likely.
 #'
 #' @param fit An `edna_dmm_fit` object from [eDNA_dmm()].
 #' @param covariates_to_plot Character vector of covariate names to show, or

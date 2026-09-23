@@ -484,6 +484,12 @@ For the example data (which was generated with K = 4), the LOO-ELPD should
 peak around K = 4 before levelling off. The model successfully recovers the
 true number of communities.
 
+> **Want more than one plot?** `eDNA_dmm_k_diagnostics(loo_result$fits, K_values = 2:5, elpd_by_run
+> = loo_result$loo_by_chain, convergence = loo_result$loo_table)` draws six panels side by side,
+> predictive fit, reliability, chain convergence, assignment certainty and community distinctness,
+> so a K that looks good on the elbow plot alone but is poorly identified or uninterpretable is easy
+> to catch. See `vignette("tutorial")` for the full walkthrough, or `?eDNA_dmm_k_diagnostics`.
+
 ## Fitting the selected K
 
 Once you have chosen K, fit the final model with more iterations for better

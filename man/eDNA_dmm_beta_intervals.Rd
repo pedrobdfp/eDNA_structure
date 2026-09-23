@@ -90,7 +90,11 @@ and by how much.
 }
 \section{Reading the plot}{
 
-Each row is one coefficient, relative to the reference community:
+Each row is one coefficient. By default (\code{reference = "none"}) it is that
+community's \emph{deviation from the average community} on that covariate, all
+\code{K} communities are drawn and there is no reference community; pass an
+integer \code{reference} to read every coefficient as a contrast against that
+one community instead (see \verb{@param reference} below).
 \itemize{
 \item The \strong{thick line} is the inner interval (50\% by default).
 \item The \strong{thin line} is the outer interval (90\% by default).
@@ -99,8 +103,9 @@ when it crosses zero.
 }
 
 A coefficient whose outer interval lies entirely above zero means the
-community becomes more likely as the covariate increases, relative to the
-reference community; entirely below zero means less likely.
+community becomes more likely as the covariate increases, relative to
+whatever the coefficient is measured against (the average community, or the
+chosen \code{reference}); entirely below zero means less likely.
 }
 
 \examples{
