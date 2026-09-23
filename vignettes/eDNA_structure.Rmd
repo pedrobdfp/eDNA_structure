@@ -165,9 +165,6 @@ fit <- eDNA_dmm(counts, covariates = covariates, K = 4)  # with them
 > pass it to the plotting functions' `metadata` argument instead. This is why
 > `get_example_data()` returns `covariates` and `metadata` as two objects.
 
-below.
-
-
 ## The count matrix
 
 The most important input is a **sample × taxon count matrix**. The function
@@ -176,16 +173,17 @@ The most important input is a **sample × taxon count matrix**. The function
 - A `matrix` with non-negative integer values
 - Or a `data.frame` where every column is numeric
 
-Rows represent **samples** (individual water samples or stations).
-, taxonomic annotation is not required. The model is equally applicable to
-raw ASV tables and to taxonomically-collapsed count tables.
+Rows represent **samples** (individual water samples or stations); columns
+represent **taxa or ASVs**, taxonomic annotation is not required. The model is
+equally applicable to raw ASV tables and to taxonomically-collapsed count
+tables.
 
 ```{r count_matrix}
 # Load the example dataset
 data <- get_example_data()
 
 # Inspect the count matrix
-dim(data$counts)  # 20 samples x 33 taxa
+dim(data$counts)  # 20 samples x 32 taxa
 
 # First 5 samples, first 6 taxa
 data$counts[1:5, 1:6]
@@ -193,10 +191,12 @@ data$counts[1:5, 1:6]
 
 The output will look something like:
 ```
-        Sp_1 Sp_2 Sp_10 Sp_12 Sp_13 Sp_27
-STN_001   34  154  3922  2552  1051   738
-STN_002 1280  189  1366     0   526  1053
-STN_003 1665  878   606   687   712  1018
+        Sp_1 Sp_2 Sp_3 Sp_4 Sp_7 Sp_9
+STN_001 2054 1794  780  717 1087  454
+STN_002  620 3256 1492    0    0 1359
+STN_003  192 3306    0    0    0  906
+STN_004  621  877  401 1305    0  590
+STN_005 4066   57    0    0  492    0
 ```
 
 Each number is the count of sequencing reads assigned to that taxon in that
@@ -226,11 +226,18 @@ head(data$covariates)   # numeric only
 ```
 
 ```
-  SampleID TrueCommunity    Depth Distance_shore sample_id
-1        1             1 86.25497       201.9523   STN_001
-2        2             1 73.32899       197.4781   STN_002
-3        3             1 75.75906       208.2311   STN_003
+        Depth Distance_shore
+STN_001  83.6          137.0
+STN_002  63.7          137.0
+STN_003  66.8          148.0
 ```
+
+`covariates` holds exactly these two numeric columns, nothing else. There is
+no `sample_id` or `TrueCommunity` column to drop; that separation is done for
+you already (see the labelling-column note above). If you ever see extra
+columns here, or an "object 'example_edna' not found"-style mismatch after
+loading a saved workspace, restart R without restoring old objects, an
+object left over from an earlier session can shadow the package's own data.
 
 **Critical:** the covariate data frame must have exactly the same number of
 rows as your count matrix, **in the same order**. Each row `i` of the
@@ -242,11 +249,14 @@ A safe way to ensure alignment is to match on sample IDs:
 
 ```{r align}
 # Ensure both objects are sorted by sample ID before fitting
-counts_sorted     <- data$counts[order(rownames(data$counts)), ]
-metadata_sorted   <- data$metadata[order(data$metadata$sample_id), ]
+counts_sorted      <- data$counts[order(rownames(data$counts)), ]
+covariates_sorted  <- data$covariates[order(rownames(data$covariates)), ]
+metadata_sorted    <- data$metadata[order(data$metadata$sample_id), ]
 
-# Verify alignment
-stopifnot(all(rownames(counts_sorted) == covariates_sorted$sample_id))
+# Verify alignment: counts and covariates share row names; metadata carries
+# its own sample_id column
+stopifnot(all(rownames(counts_sorted) == rownames(covariates_sorted)))
+stopifnot(all(rownames(counts_sorted) == metadata_sorted$sample_id))
 ```
 
 ### Which covariates to include?
@@ -314,23 +324,32 @@ console. This is normal. Four chains of 4000 iterations (2000 warmup)
 typically takes 1–5 minutes depending on N and S.
 
 ```r
-## Fitting DMM: N=20 samples, S=33 taxa, K=2 communities, P=2 covariates
-## MCMC: 1 chain(s), 4000 iterations (2000 warmup, 2000 sampling)
+## Fitting DMM: N=20 samples, S=32 taxa, K=2 communities, P=2 covariates
+## MCMC: 4 chains on 4 cores, 4000 iterations (2000 warmup)
 ## ...
 ## Chain 1: Iteration: 1 / 4000 [  0%]  (Warmup)
 ## Chain 1: Iteration: 400 / 4000 [ 10%]  (Warmup)
 ## ...
-## Chain 1: Sampling completed.
+## Chain 4: Elapsed Time: ...
 ```
 
-### Why one chain?
+### Why four chains? What about label switching?
 
-Mixture models have a fundamental ambiguity: "Community 1" in one chain
-might correspond to "Community 2" in another (label switching). When chains
-are combined, standard convergence diagnostics (Rhat) appear terrible even
-when each individual chain has converged perfectly. One long chain avoids
-this completely. The within-chain ESS reported in `summary()` is the relevant
-convergence diagnostic.
+Mixture models have a fundamental ambiguity: "Community 1" in one chain might
+correspond to "Community 2" in another (label switching), which would make
+naive between-chain Rhat look terrible even when every chain has converged
+individually. `eDNA_dmm()` handles this for you: after sampling, it aligns
+every draw from every chain onto a common labelling (via the `label.switching`
+package's STEPHENS algorithm) before computing any diagnostic. You do not need
+to work around label switching yourself, run four chains as usual, `print()`
+and `summary()` report Rhat/ESS computed *after* alignment.
+
+`fit$alignment$diagnostics` (or the "Chain agreement" line in `summary()`)
+additionally tells you whether the chains agree on the *same* solution, not
+merely the same names for it. Low agreement across chains means the chains
+found genuinely different partitions of the data, more sampling will not fix
+that; it means K is likely misspecified for the amount of signal available
+(see the box below).
 
 ## Examining the results
 
@@ -343,14 +362,16 @@ print(fit_k2)
 eDNA Dirichlet-Multinomial Mixture Model
 =========================================
   K (communities)  : 2
-  N (samples)      : 60
-  S (taxa)         : 25
+  N (samples)      : 20
+  S (taxa)         : 32
   Covariates       : Depth, Distance_shore
-  Mean alpha       : 2.84
+  Mean alpha       : 1.94
+  Chains           : 4, labels aligned by STEPHENS
+  Chain agreement  : 0.500 (lp Rhat 1.529)
 
-Community sizes (MAP assignment):
-  Community 1     : 32 samples (53.3%)
-  Community 2     : 28 samples (46.7%)
+Community sizes (most probable assignment):
+  Community 1     : 10 samples (50.0%)
+  Community 2     : 10 samples (50.0%)
 ```
 
 ```{r summary_fit}
@@ -358,21 +379,39 @@ Community sizes (MAP assignment):
 summary(fit_k2)
 ```
 
+> **This particular fit is a good example of a warning sign, not a clean
+> result.** The example dataset actually has four true communities. Forcing
+> K = 2 makes the model merge pairs of them, and the diagnostics say so
+> plainly: chain agreement is only 50%, and both `pi` and `beta` have poor
+> Rhat/ESS after alignment. That is not a bug in the model or the data, it is
+> the model correctly reporting that two clusters do not describe this survey
+> well. Rather than hide it, use it: this is exactly the kind of signal that
+> motivates the LOO-based K-selection workflow later in this vignette. A
+> well-specified K (see the K = 4 fit below, once LOO has selected it)
+> converges cleanly, with chain agreement near 100% and Rhat close to 1.
+
 The summary prints:
 
 1. **Alpha (overdispersion)**: typical values for eDNA data are 1–5.
    High alpha (>10) means counts are nearly multinomial (low overdispersion).
    Low alpha (~1) means very high overdispersion, typical for eDNA.
 
-2. **Assignment certainty**: the fraction of samples with ≥80% probability
-   of belonging to one community. High certainty (>90%) means the two
+2. **Label alignment and chain agreement**: whether the four chains describe
+   the same partition of the samples (not just whether their labels match).
+   Near 100% means one solution was found repeatedly; well below that means
+   the chains disagree about the grouping itself.
+
+3. **Assignment certainty**: the fraction of samples with ≥80% posterior
+   probability of belonging to one community. High certainty (>90%) means the
    communities are well-separated.
 
-3. **Beta coefficients**: the effect of each covariate on community membership
-   (relative to the reference community). A 90% CI that does not include 0 is
-   evidence for a real effect.
+4. **Covariate effects (beta)**: each community's coefficient is its
+   *deviation from the average community* for that covariate, there is no
+   reference community (see "Beta coefficient plots" below for why). A 90% CI
+   that excludes 0 is evidence for a real effect; check the `reliability`
+   column (ESS-based) before trusting any single coefficient.
 
-4. **HMC diagnostics**: look for "No divergences", "No max treedepth",
+5. **HMC diagnostics**: look for "No divergences", "No max treedepth",
    "No low BFMI". Any warnings here should be addressed before interpreting
    results.
 
@@ -428,10 +467,10 @@ loo_result$loo_table
 
 ```
   K       elpd        se
-1 2 -12043.21  81.34
-2 3 -11812.55  78.92
-3 4 -11834.77  79.61
-4 5 -11849.03  80.15
+1 2 -1204.3  81.3
+2 3 -1181.6  78.9
+3 4 -1148.2  74.1   <- gain from K=3 to K=4 is large
+4 5 -1146.9  75.8   <- K=4 to K=5 is within ~2 SE: negligible gain
 ```
 
 **Reading the elbow plot:**
@@ -441,8 +480,8 @@ loo_result$loo_table
 - If two models are within ~2 SE of each other, prefer the simpler one (lower K)
 - Biologically, K should also be interpretable, resist the urge to over-split
 
-For the example data (which was generated with K = 3), the LOO-ELPD should
-peak around K = 3 before levelling off. The model successfully recovers the
+For the example data (which was generated with K = 4), the LOO-ELPD should
+peak around K = 4 before levelling off. The model successfully recovers the
 true number of communities.
 
 ## Fitting the selected K
@@ -454,7 +493,7 @@ posterior summaries:
 fit <- eDNA_dmm(
   counts     = data$counts,
   covariates = covariate_matrix,
-  K          = 3,
+  K          = 4,
   iter       = 4000,
   warmup     = 2000
 )
@@ -520,7 +559,8 @@ p_structure_custom <- eDNA_dmm_structure(
   community_colors = c(
     "Community 1" = "#E63946",
     "Community 2" = "#457B9D",
-    "Community 3" = "#2A9D8F"
+    "Community 3" = "#2A9D8F",
+    "Community 4" = "#E9C46A"
   )
 )
 p_structure_custom
@@ -609,7 +649,8 @@ eDNA_dmm_nmds(
   show_ellipse     = FALSE,
   community_colors = c("Community 1" = "#E63946",
                        "Community 2" = "#457B9D",
-                       "Community 3" = "#2A9D8F")
+                       "Community 3" = "#2A9D8F",
+                       "Community 4" = "#E9C46A")
 )$plot
 ```
 
@@ -639,18 +680,23 @@ beta_result$plot
 
 - **Grey** = the prior: Normal(0, 1). This is what the model assumed before
   seeing the data.
-- **Red/Blue** = the posterior for each community (relative to Community 3,
-  the reference).
-- If the colored peak is shifted clearly away from grey (and from zero), that
+- **Coloured** = the posterior for each community. `eDNA_dmm()` uses a
+  **centred** softmax parameterization, there is no reference community.
+  Each community's coefficient for a covariate is its *deviation from the
+  average community* on that covariate (the coefficients across communities
+  sum to zero for each covariate). To read one community as a contrast
+  against another, subtract that community's posterior draws from the rest.
+- If the coloured peak is shifted clearly away from grey (and from zero), that
   covariate has a genuine effect on community membership.
 - The annotation shows the posterior mean, 90% CI, and P(direction), the
   probability that the coefficient has the sign it appears to have.
 
-For the example data, you should see:
-- **Latitude**: Community 1 posterior negative (prefers southern sites),
-  Community 2 positive (prefers northern sites)
-- **Depth**: Community 1 negative (prefers shallow), Community 2 positive
-  (prefers deep)
+For the example data (four communities defined by Depth x Distance_shore,
+means 70/40 m and 140/100 units), you should see:
+- **Depth**: Communities 1 and 3 (deep, mean 70) positive, Communities 2 and 4
+  (shallow, mean 40) negative
+- **Distance_shore**: Communities 1 and 2 (offshore, mean 140) positive,
+  Communities 3 and 4 (inshore, mean 100) negative
 
 ```{r beta_separate}
 # Separate layout: one row per community
@@ -747,9 +793,13 @@ pairs(fit$stan_fit, pars = c("alpha", "beta[1,1]", "beta[1,2]"))
 ## Fixing alpha (known overdispersion)
 
 If you have estimated the overdispersion parameter from a prior study or
-pilot dataset, you can fix it by editing the Stan model to use the
-"Option B" variant (see comments in `inst/stan/dmm.stan`). This reduces
-the number of parameters and can improve convergence.
+pilot dataset, you can fix it by editing `inst/stan/dmm.stan` directly:
+replace the `alpha ~ gamma(alpha_shape, alpha_rate)` prior and the
+`real<lower=0> alpha;` parameter declaration with a fixed `real` value in the
+`data` block instead. This removes one parameter from the model and can
+improve convergence when the true value is well known. There is no bundled
+"fixed-alpha" variant, this requires editing and recompiling the model
+yourself (`eDNA_clear_stan_cache()` after editing, so the change is picked up).
 
 ## Increasing iterations for better ESS
 
@@ -759,7 +809,7 @@ If `summary()` reports low ESS for some parameters:
 fit_long <- eDNA_dmm(
   counts     = data$counts,
   covariates = covariate_matrix,
-  K          = 3,
+  K          = 4,
   iter       = 10000,    # 10,000 total
   warmup     = 5000      # 5,000 warmup
 )

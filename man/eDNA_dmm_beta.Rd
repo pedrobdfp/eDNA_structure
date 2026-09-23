@@ -10,6 +10,7 @@ eDNA_dmm_beta(
   covariates_to_plot = NULL,
   show_intercept = FALSE,
   beta_prior_sd = 1,
+  reference = "none",
   n_prior_samples = 20000,
   community_colors = NULL,
   prior_color = "grey60",
@@ -41,6 +42,17 @@ Normal(0, \code{beta_prior_sd}) prior used on beta coefficients in the Stan
 model. Default is \code{1.0}. This \strong{must match} the \code{to_vector(beta) ~ normal(0, sd)}
 line in the Stan model. The default Stan model uses \code{normal(0, 1.0)}. If
 you have changed the prior (e.g., to \code{normal(0, 2.5)}), update this argument.}
+
+\item{reference}{How the coefficients are identified for display.
+\code{"none"} (default) centres them across communities, so each
+value is that community's deviation from the average community and all
+\code{K} communities are drawn. An integer instead reads every
+coefficient as a contrast against that community, which is then omitted
+as the reference. \code{NULL} uses the fit's own \code{beta_reference} if it has one.
+
+Changing this requires no refitting. The softmax is invariant to adding
+a constant across communities, so the choice is a normalisation applied
+to the finished draws, not an estimate.}
 
 \item{n_prior_samples}{A positive integer: the number of draws from the
 prior distribution to use for the prior density. Default is \code{20000}.

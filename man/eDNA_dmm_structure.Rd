@@ -25,6 +25,7 @@ eDNA_dmm_structure(
   legend_rel_height = 0.1,
   legend_rel_width = 0.2,
   bar_width = 0.9,
+  panel_spacing = 0.3,
   strip_text_size = NULL,
   row_label_size = NULL,
   ylab = "Membership probability",
@@ -90,7 +91,11 @@ clipped without warning.}
 \item{legend_rel_width}{Width of a left or right legend, as a fraction of
 the panel stack. Default \code{0.2}.}
 
-\item{bar_width}{Width of each bar, in units of one x slot. Default \code{0.9},
+\item{bar_width}{Width of each bar, in units of one x slot. Default \code{0.9},}
+
+\item{panel_spacing}{Numeric. Horizontal gap between facet panels, in
+lines. Default \code{0.3}. Increase it when panels hold few bars, where the
+default reads as narrower than the gaps between the bars themselves.
 which leaves a thin white gutter so individual samples stay countable
 and matches \code{\link[=plot_true_compositions]{plot_true_compositions()}}. Use \code{1} for a gapless block.}
 

@@ -8,9 +8,10 @@ eDNA_dmm(
   counts,
   covariates = NULL,
   K = 2,
-  replication = NULL,
   scale_covariates = TRUE,
-  chains = 1,
+  chains = 4,
+  cores = NULL,
+  method = c("STEPHENS", "ECR-pivot", "ECR-iterative"),
   iter = 4000,
   warmup = 2000,
   adapt_delta = 0.95,
@@ -19,276 +20,184 @@ eDNA_dmm(
   conc = 0.5,
   alpha_shape = 5,
   alpha_rate = 2,
-  phi_shape = 2,
-  phi_rate = 0.02,
+  rhat_threshold = 1.05,
+  ess_threshold = 100,
   verbose = TRUE
 )
 }
 \arguments{
-\item{counts}{A numeric matrix or data frame of \strong{non-negative integer} read
-counts. Rows are samples; columns are taxa or ASVs. Row names (if present)
-are used as sample IDs in plots. Column names are used as taxon labels.}
+\item{counts}{Integer matrix of read counts, samples in rows and taxa in
+columns.}
 
-\item{covariates}{A numeric matrix or data frame of environmental covariates
-(rows = samples, columns = covariates). Must have the same number of rows
-as \code{counts}, in the same order. Set to \code{NULL} (the default) to fit an
-intercept-only model with no covariate effects on community membership.}
+\item{covariates}{Matrix or data frame of covariates, one row per sample, or
+\code{NULL} for an intercept-only model.}
 
-\item{K}{A single positive integer ≥ 2: the number of latent communities.
-If you are unsure, start with \code{K = 2} and increase. The function
-\code{\link[=eDNA_loo]{eDNA_loo()}} can help compare models across values of K.}
+\item{K}{Number of latent communities. Default \code{2}.}
 
-\item{replication}{Optional vector of station labels, one per \strong{row} of
-\code{counts}, identifying which rows are replicates of the same station. Rows
-sharing a label are treated as replicates. Leave as \code{NULL} (the default)
-when each row of \code{counts} is an independent sample; this is the standard,
-fully identified model and the right choice for unreplicated data. See the
-\strong{Replicated samples} section.}
+\item{scale_covariates}{Standardise covariates internally. Default \code{TRUE}.}
 
-\item{scale_covariates}{Logical. If \code{TRUE} (the default), covariates are
-Z-score standardized (mean = 0, SD = 1) before fitting. This is
-\strong{strongly recommended} because it (a) improves MCMC mixing,
-(b) makes beta coefficients directly comparable across covariates, and
-(c) ensures the Normal(0, 1) prior on beta is weakly informative. Set
-to \code{FALSE} only if you have already standardized your covariates manually.}
+\item{chains}{Number of chains. Default \code{4}.}
 
-\item{chains}{A single positive integer: the number of MCMC chains.
-Default is \code{1}. See the \strong{Single-chain recommendation} section above.
-If you want multi-chain runs (e.g., for sensitivity checks), increase
-this, but interpret Rhat values with caution in the context of mixture
-models.}
+\item{cores}{Cores for running chains in parallel. \code{NULL} (default) uses one
+per chain, capped at the number of physical cores.}
 
-\item{iter}{A single positive integer: total number of MCMC iterations per
-chain, \strong{including} warmup. Default is \code{4000}. Increase for complex models
-(large K, many covariates) or when ESS is low. A chain of length 4000 with
-2000 warmup gives 2000 post-warmup draws.}
+\item{method}{Label alignment algorithm, passed to \code{\link[=dmm_align_labels]{dmm_align_labels()}}.
+\code{"STEPHENS"} (default) minimises Kullback-Leibler divergence against the
+mean membership matrix. \code{"ECR-pivot"} anchors to the allocation of the
+highest-density draw. \code{"ECR-iterative"} is faster but can settle into a
+local optimum that mimics non-convergence, so prefer the first two.}
 
-\item{warmup}{A single positive integer: the number of warmup (burn-in)
-iterations per chain. Default is \code{2000} (half of \code{iter}). Must be less
-than \code{iter}. During warmup, Stan adapts the step size; these draws are
-discarded.}
+\item{iter}{Total iterations per chain. Default \code{4000}.}
 
-\item{adapt_delta}{A number in (0, 1): the target average acceptance
-probability for the NUTS sampler. Default is \code{0.95}. Increase toward
-\code{0.99} if you see divergent transitions in the diagnostics. Higher values
-slow sampling but reduce divergences.}
+\item{warmup}{Warmup iterations per chain. Default \code{2000}.}
 
-\item{max_treedepth}{A positive integer: the maximum tree depth for the
-NUTS sampler. Default is \code{12}. Increase to \code{14} or \code{15} if you see
-"maximum treedepth exceeded" warnings.}
+\item{adapt_delta}{Target acceptance rate. Raise towards \code{0.99} if divergent
+transitions appear. Default \code{0.95}.}
 
-\item{seed}{A single integer: the random seed for Stan. Default is \code{13}.
-Set a fixed seed for reproducibility across runs.}
+\item{max_treedepth}{Maximum tree depth. Default \code{12}.}
 
-\item{conc}{A positive number: the Dirichlet concentration parameter for
-the prior on community compositions (\code{pi}). Default is \code{0.5}.
-\itemize{
-\item \code{conc < 1} (e.g., 0.5): sparse compositions, in which each community is
-dominated by a few taxa. Usually appropriate for eDNA data.
-\item \code{conc = 1}: flat (symmetric Dirichlet) prior, under which all compositions
-equally likely. Uninformative.
-\item \code{conc > 1}: concentrates compositions toward uniform. Use only
-if you expect all taxa to be equally abundant in each community.
-}}
+\item{seed}{Random seed. Default \code{13}.}
 
-\item{alpha_shape}{A positive number: the shape parameter of the Gamma
-prior on the overdispersion parameter \code{alpha}. Default is \code{5}. The
-prior mean of \code{alpha} is \code{alpha_shape / alpha_rate}. Larger \code{alpha}
-means less overdispersion (counts closer to multinomial).}
+\item{conc}{Dirichlet concentration for the community compositions. Values
+below one favour sparse compositions, which suits eDNA. Default \code{0.5}.}
 
-\item{alpha_rate}{A positive number: the rate parameter of the Gamma
-prior on \code{alpha}. Default is \code{2}. Prior mean = \code{alpha_shape / alpha_rate}
-= 2.5. Adjust if you have strong prior information about overdispersion.}
+\item{alpha_shape, alpha_rate}{Gamma prior on the overdispersion \code{alpha}; the
+prior mean is \code{alpha_shape / alpha_rate}. Defaults \code{5} and \code{2}.}
 
-\item{phi_shape}{A positive number: shape of the Gamma prior on the
-replicate-level dispersion \code{phi}. Default is \code{2}. Only used when
-\code{replication} is supplied.}
+\item{rhat_threshold, ess_threshold}{Thresholds above and below which a
+warning is issued for quantities that remain problematic after alignment.
+Defaults \code{1.05} and \code{100}.}
 
-\item{phi_rate}{A positive number: rate of the Gamma prior on \code{phi}.
-Default is \code{0.02}, giving a diffuse prior with mean 100, deliberately much
-larger than the prior mean for \code{alpha}, because replicates of one station
-are usually far more similar to each other than different stations are.
-Only used when \code{replication} is supplied.}
-
-\item{verbose}{Logical. If \code{TRUE} (the default), print Stan compilation and
-sampling progress. Set to \code{FALSE} for silent fitting (useful in loops
-over multiple K values).}
+\item{verbose}{Print progress and diagnostics. Default \code{TRUE}.}
 }
 \value{
-An \code{edna_dmm_fit} object (a list). See the \strong{Output object} section
-for full documentation of all elements.
+An object of class \code{edna_dmm_fit}, a list containing:
+\describe{
+\item{\code{stan_fit}}{The underlying \link[rstan:stanfit-class]{rstan::stanfit} object.}
+\item{\code{sample_info}}{One row per sample: \code{sample_id}, the membership
+probability of each community, the most probable community \code{z_hat}, and
+\code{assignment_certainty}, the largest membership probability.}
+\item{\code{pi_mean}}{\code{K} by \code{S} matrix of posterior mean compositions.}
+\item{\code{beta_summary}}{One row per community and covariate, summarising the
+centred coefficients.}
+\item{\code{beta_draws_aligned}}{\code{draws} by \code{K} by \code{P + 1} array of aligned,
+centred coefficient draws.}
+\item{\code{alignment}}{Alignment method, the permutations applied, the share
+of draws relabelled, post-alignment diagnostics, \code{lp_rhat},
+\code{chain_agreement} and \code{min_agreement}.}
+\item{\code{alpha_mean}}{Posterior mean overdispersion.}
+\item{\code{K},\code{N},\code{S}}{Communities, samples and taxa.}
+\item{\code{taxa_names},\code{covariate_names},\code{scale_info},\code{counts},\code{stan_data},\code{call}}{
+Inputs and metadata retained for downstream functions.}
+}
 }
 \description{
-\code{eDNA_dmm()} fits a Bayesian Dirichlet-Multinomial Mixture (DMM) model
-to a sample × taxon read count matrix. It identifies \code{K} latent ecological
+\code{eDNA_dmm()} fits a Bayesian Dirichlet-Multinomial Mixture (DMM) model to a
+sample by taxon read count matrix. It identifies \code{K} latent ecological
 communities, estimates their taxonomic compositions, and models how
-environmental covariates (e.g., depth, latitude) drive community membership
-through a softmax regression.
+environmental covariates such as depth or latitude drive community
+membership through a softmax regression.
 
-Inference is performed with Stan via \code{\link[rstan:stan]{rstan::stan()}}. The result is an
-\code{edna_dmm_fit} object that can be passed to the visualization functions
-\code{\link[=eDNA_dmm_structure]{eDNA_dmm_structure()}}, \code{\link[=eDNA_dmm_nmds]{eDNA_dmm_nmds()}}, and \code{\link[=eDNA_dmm_beta]{eDNA_dmm_beta()}}.
+Inference is performed with Stan via \code{\link[rstan:sampling]{rstan::sampling()}}. Several chains are
+run by default and their community labels are aligned automatically before
+anything is summarised, so the returned estimates and convergence
+diagnostics are directly interpretable. The result is an \code{edna_dmm_fit}
+object that can be passed to \code{\link[=eDNA_dmm_structure]{eDNA_dmm_structure()}}, \code{\link[=eDNA_dmm_nmds]{eDNA_dmm_nmds()}},
+\code{\link[=eDNA_dmm_compositions]{eDNA_dmm_compositions()}}, \code{\link[=eDNA_dmm_beta]{eDNA_dmm_beta()}} and
+\code{\link[=eDNA_dmm_beta_intervals]{eDNA_dmm_beta_intervals()}}.
 }
 \section{Input format}{
 
-\code{counts} should be a \strong{sample × taxon} matrix of non-negative integer read
-counts. Rows are samples (stations, replicates, etc.) and columns are taxa
-(or ASVs, the model does not require taxonomic annotation). Row names
-are used as sample identifiers in plots; column names are used as taxon
-labels.
+\code{counts} should be a sample by taxon matrix of non-negative integer read
+counts. Rows are samples and columns are taxa or ASVs; the model does not
+require taxonomic annotation. Row names are used as sample identifiers in
+plots and column names as taxon labels. Taxa with no reads in any sample are
+dropped.
 
-\code{covariates} should be a \strong{sample × covariate} matrix or data frame. It
-must have the same number of rows as \code{counts}, in the same order. Covariates
-are Z-score standardized internally by default (\code{scale_covariates = TRUE}),
-which is strongly recommended for interpretable beta coefficients and good
-MCMC mixing. Pass \code{NULL} to fit an intercept-only model.
+\code{covariates} should be a sample by covariate matrix or data frame with the
+same number of rows as \code{counts}, in the same order. Covariates are
+standardised internally by default (\code{scale_covariates = TRUE}), which is
+strongly recommended for interpretable coefficients and good mixing. Pass
+\code{NULL} to fit an intercept-only model.
 }
 
 \section{The model}{
 
-For each sample \code{i}, the model marginalizes over a latent community
+For each sample \code{i} the model marginalises over a latent community
 assignment \code{z_i}:
 \itemize{
-\item Community compositions: \verb{pi_k ~ Dirichlet(conc * 1_S)} for each
-community \code{k}
-\item Community membership: \code{P(z_i = k) = softmax(beta_0k + beta_covariates)}
-\item Observed counts: \code{x_i | z_i = k ~ DirichletMultinomial(N_i, alpha * pi_k)}
+\item Community compositions: \verb{pi_k ~ Dirichlet(conc * 1_S)} for each community
+\code{k}.
+\item Community membership: \verb{P(z_i = k) = softmax(x_i' beta_k)}, where \code{x_i} is
+the covariate row for sample \code{i} with an intercept prepended.
+\item Observed counts: \code{x_i | z_i = k ~ DirichletMultinomial(N_i, alpha * pi_k)}.
 }
 
-\code{alpha} is a global overdispersion scalar estimated from the data. Larger
-\code{alpha} means lower overdispersion (counts are more multinomial-like).
-Typical eDNA data have \code{alpha} in the range 1–5.
+\code{alpha} is a global overdispersion scalar estimated from the data. Values
+much greater than one approach a multinomial; values near one indicate the
+strong overdispersion typical of eDNA read counts.
 }
 
-\section{Replicated samples}{
+\section{Identifying the softmax coefficients}{
 
-If a station was sequenced more than once (PCR or sampling replicates), pass
-each replicate as its own row of \code{counts} and use \code{replication} to say which
-rows belong together. This switches to a hierarchical model that estimates
-each station's own composition:
-\itemize{
-\item Station composition: \code{theta_i ~ Dirichlet(alpha * pi_k)}
-\item Replicate counts: \code{y_ir ~ DirichletMultinomial(N_ir, phi * theta_i)}
+Adding the same constant to every community's linear predictor leaves the
+softmax unchanged, so for each covariate the \code{K} coefficients hold one
+redundant degree of freedom. The model removes it by constraining the
+coefficients to sum to zero across communities within each covariate. Each
+coefficient is therefore the deviation of that community from the average
+community, and \code{beta} has \code{K} rows rather than \code{K - 1}.
+
+This keeps the prior exchangeable across communities, which matches the fact
+that mixture components have no inherent identity, and leaves the posterior
+less correlated and easier to sample. To read coefficients against one
+particular community instead, pass \code{reference} to \code{\link[=dmm_beta_draws]{dmm_beta_draws()}} or
+\code{\link[=eDNA_dmm_beta_intervals]{eDNA_dmm_beta_intervals()}}; that is a change of coordinates applied to the
+finished draws and requires no refitting.
 }
 
-There are then two dispersion parameters answering two different questions:
-\code{alpha} (how tightly stations cluster around their community) and \code{phi} (how
-tightly replicates cluster around their own station). The posterior mean
-station compositions are returned as \code{theta_mean}.
+\section{Why the labels are aligned}{
 
-\strong{Why not just sum the replicates?} Summing would be lossless if replicates
-were plain multinomial draws from the station's composition, their sum is a
-sufficient statistic, and the summed model is exactly what you get. Replicates
-are informative precisely because they are \emph{overdispersed} relative to
-multinomial (PCR jackpotting, uneven template). Replicate concordance versus
-scatter is the signal, and summing discards it.
+A mixture likelihood is invariant to permuting its components, so chains
+that have converged on the same posterior can still disagree about which
+community is labelled 1, 2, 3 and so on, and a single chain can renumber its
+components partway through a run. Estimates and cross-chain diagnostics
+computed in that state describe the labelling rather than the fit.
 
-Replication may be ragged: stations can have different numbers of replicates,
-and stations with a single replicate are fully supported, their \code{theta_i} is
-informed by that replicate plus shrinkage toward \code{alpha * pi_k}, using a \code{phi}
-learned from the replicated stations. If \emph{no} station has more than one
-replicate, \code{alpha} and \code{phi} are not separately identified, so \code{eDNA_dmm()}
-simply uses the standard model instead and says so.
+\code{eDNA_dmm()} therefore aligns every posterior draw onto a common labelling
+with \code{\link[=dmm_align_labels]{dmm_align_labels()}} before computing anything, using the algorithm of
+Stephens (2000). Community compositions, membership probabilities and
+coefficients are all rebuilt from the aligned draws.
 
-\code{covariates} remain \strong{station-level}: supply either one row per station (in
-order of first appearance in \code{replication}) or one row per row of \code{counts}, in
-which case they are collapsed automatically. A covariate that varies between
-replicates of the same station is an error, since the model has no
-replicate-level covariate term.
-
-Note that \code{\link[=eDNA_loo]{eDNA_loo()}} deliberately stays on the standard summed model for
-K selection. See its documentation.
-}
-
-\section{Single-chain recommendation}{
-
-By default, \code{eDNA_dmm()} fits a \strong{single MCMC chain} (\code{chains = 1}).
-This is intentional. Mixture models suffer from \emph{label switching}: across
-multiple chains, "Community 1" may refer to different groups, making
-multi-chain Rhat diagnostics uninformative (they will always look bad, even
-when each chain converges perfectly). Within a single long chain, label
-switching is extremely rare given good initialization. Use the within-chain
-ESS reported in the output to assess convergence instead.
-}
-
-\section{Output object}{
-
-Returns an \code{edna_dmm_fit} object, which is also a standard R \code{list} with
-elements:
-\describe{
-\item{\code{stan_fit}}{The raw \link[rstan:stanfit-class]{rstan::stanfit} object.}
-\item{\code{sample_info}}{Data frame: one row per sample with posterior
-community membership probabilities (\code{prob_comm1}, \code{prob_comm2}, ...),
-MAP assignment (\code{z_hat}), and assignment certainty.}
-\item{\code{pi_mean}}{Matrix \verb{K × S}: posterior mean community compositions.
-\code{pi_mean[k, j]} = posterior mean relative frequency of taxon \code{j} in
-community \code{k}.}
-\item{\code{beta_summary}}{Data frame: posterior summaries for each softmax
-regression coefficient (mean, 90\% CI, P(direction), ESS).}
-\item{\code{alpha_mean}}{Scalar: posterior mean of the overdispersion parameter.}
-\item{\code{replicate}}{Logical: whether the replicate-aware model was used.}
-\item{\code{theta_mean}}{Matrix \verb{N × S} of posterior mean \strong{station}
-compositions, or \code{NULL} when the standard model was used. Only available
-from the replicate model, the summed model has no station-level
-composition parameter.}
-\item{\code{phi_mean}}{Scalar: posterior mean replicate-level dispersion, or
-\code{NULL} when the standard model was used.}
-\item{\code{K}}{Number of communities fitted.}
-\item{\code{N}}{Number of samples, stations, when the replicate model is used.}
-\item{\code{R}}{Number of replicate rows (equals \code{N} for the standard model).}
-\item{\code{S}}{Number of taxa.}
-\item{\code{taxa_names}}{Character vector of taxon names (column names of \code{counts}).}
-\item{\code{covariate_names}}{Character vector of covariate names.}
-\item{\code{scale_info}}{List with \code{center} and \code{scale} vectors used for
-Z-scoring (NULL if \code{scale_covariates = FALSE}).}
-\item{\code{counts}}{The filtered count matrix as passed to Stan.}
-\item{\code{stan_data}}{The list passed to Stan (for advanced diagnostics).}
-\item{\code{call}}{The matched function call.}
-}
+Alignment repairs disagreement about names. It cannot repair disagreement
+about the partition. Two quantities that relabelling cannot affect are
+reported alongside it in \code{fit$alignment}: \code{lp_rhat}, the convergence
+statistic of the log posterior density, which is invariant to permutation by
+construction, and \code{min_agreement}, the share of samples that the two least
+similar chains place in the same community. Values close to one for both
+mean the chains found the same solution; a clear departure in either means
+they did not, which usually indicates a \code{K} the data do not support.
 }
 
 \examples{
 \dontrun{
-# Load example data
-data <- get_example_data()
+d   <- get_example_data()
+fit <- eDNA_dmm(d$counts, d$covariates, K = 4)
 
-# Fit K=2, with depth and latitude as covariates
-fit <- eDNA_dmm(
-  counts     = data$counts,
-  covariates = data$covariates[, c("depth", "latitude")],
-  K          = 2
-)
+fit                              # dimensions and community sizes
+summary(fit)                     # convergence and covariate effects
+fit$alignment$min_agreement      # did the chains find the same solution?
 
-# Summary of the fit
-print(fit)
-summary(fit)
-
-# Intercept-only model (no covariates)
-fit_null <- eDNA_dmm(
-  counts     = data$counts,
-  covariates = NULL,
-  K          = 2
-)
-
-# Replicated data: each row of `counts` is one replicate, and `replication`
-# says which rows belong to the same station. Covariates stay station-level.
-fit_rep <- eDNA_dmm(
-  counts     = replicate_counts,
-  replication = replicate_meta$station,
-  covariates = station_covariates,
-  K          = 2
-)
-fit_rep$theta_mean   # posterior mean composition of each station
-fit_rep$phi_mean     # replicate reproducibility
+eDNA_dmm_structure(fit, metadata = d$metadata)
+eDNA_dmm_beta_intervals(fit)$plot
 }
 
+}
+\references{
+Stephens, M. (2000). Dealing with label switching in mixture models.
+\emph{Journal of the Royal Statistical Society B}, 62(4), 795-809.
 }
 \seealso{
-\itemize{
-\item \code{\link[=eDNA_dmm_structure]{eDNA_dmm_structure()}} for structure (STRUCTURE-like bar) plots
-\item \code{\link[=eDNA_dmm_nmds]{eDNA_dmm_nmds()}} for NMDS ordination colored by community
-\item \code{\link[=eDNA_dmm_beta]{eDNA_dmm_beta()}} for covariate coefficient plots with prior/posterior comparison
-\item \code{\link[=eDNA_loo]{eDNA_loo()}} for LOO-CV model comparison across K values
-\item \code{\link[=get_example_data]{get_example_data()}} for a built-in example dataset and tutorial
-}
+\code{\link[=eDNA_loo]{eDNA_loo()}} to compare models across \code{K},
+\code{\link[=eDNA_dmm_k_diagnostics]{eDNA_dmm_k_diagnostics()}} for the wider set of \code{K} diagnostics,
+\code{\link[=dmm_align_labels]{dmm_align_labels()}} for the alignment step on its own.
 }

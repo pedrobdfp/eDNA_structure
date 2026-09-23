@@ -10,44 +10,44 @@ get_example_data()
 A named list with elements \code{counts}, \code{covariates} and \code{metadata}.
 }
 \description{
-A small, deliberately plain example survey: a site-by-taxon count table plus
+A small, deliberately plain example survey: a site by taxon count table plus
 the two numeric covariates that separate the communities. Twenty sites,
-33 taxa, four true communities.
+32 taxa, four true communities.
 
 Use it to learn the expected input format for \code{\link[=eDNA_dmm]{eDNA_dmm()}}, to follow the
-vignettes, or to check that your installation works.
+vignettes, or to check that an installation works.
 }
 \section{Data format}{
 
 \describe{
-\item{\code{counts}}{Integer matrix, 20 sites x 33 taxa. Rows are sites
-(\code{STN_001}-\code{STN_020}), columns are taxa (\code{Sp_1}, \code{Sp_2}, ...).
+\item{\code{counts}}{Integer matrix, 20 sites by 32 taxa. Rows are sites
+(\code{STN_001} to \code{STN_020}), columns are taxa (\code{Sp_1}, \code{Sp_2}, and so on).
 This is the only required input to \code{\link[=eDNA_dmm]{eDNA_dmm()}}.}
-\item{\code{covariates}}{Data frame, 20 rows x 2 numeric columns: \code{Depth} (m)
-and \code{Distance_shore}. Every column is numeric, so this can be passed
-straight to \code{\link[=eDNA_dmm]{eDNA_dmm()}} with nothing dropped.}
+\item{\code{covariates}}{Data frame, 20 rows by 2 numeric columns: \code{Depth} in
+metres and \code{Distance_shore}. Every column is numeric, so it can be
+passed straight to \code{\link[=eDNA_dmm]{eDNA_dmm()}} with nothing dropped.}
 \item{\code{metadata}}{Data frame, 20 rows: \code{sample_id}, \code{TrueCommunity},
-\code{Depth}, \code{Distance_shore}. The labelling columns, kept separate from
-the model covariates. Pass this to the plotting functions'
-\code{metadata} argument.}
+\code{Depth}, \code{Distance_shore}. The labelling columns, kept separate from the
+model covariates. Pass this to the plotting functions' \code{metadata}
+argument.}
 }
 
-\code{covariates} and \code{metadata} are separate on purpose. \code{eDNA_dmm()} requires
-every covariate column to be numeric, so an identifier column such as
-\code{sample_id}, or a ground-truth column such as \code{TrueCommunity}, cannot be
-part of \code{covariates} - the model would try to fit it. The plotting
-functions want exactly those labelling columns. Keeping the two apart means
-both calls work without the user having to subset anything.
+\code{covariates} and \code{metadata} are separate on purpose. \code{\link[=eDNA_dmm]{eDNA_dmm()}} requires
+every covariate column to be numeric, so an identifier such as \code{sample_id},
+or a ground-truth column such as \code{TrueCommunity}, cannot be part of
+\code{covariates}; the model would try to fit it. The plotting functions want
+exactly those labelling columns. Keeping the two apart means both calls work
+without the user having to subset anything.
 }
 
 \section{Community structure}{
 
 Four communities separated by two covariates:
 \itemize{
-\item \strong{Community 1}: deep (80 m) + offshore (200 units)
-\item \strong{Community 2}: surface (10 m) + offshore (200 units)
-\item \strong{Community 3}: deep (80 m) + inshore (20 units)
-\item \strong{Community 4}: surface (10 m) + inshore (20 units)
+\item \strong{Community 1}: deep (70 m) and offshore (140 units)
+\item \strong{Community 2}: shallow (40 m) and offshore (140 units)
+\item \strong{Community 3}: deep (70 m) and inshore (100 units)
+\item \strong{Community 4}: shallow (40 m) and inshore (100 units)
 }
 }
 
@@ -55,10 +55,9 @@ Four communities separated by two covariates:
 
 The \code{counts} matrix format is the required input to \code{\link[=eDNA_dmm]{eDNA_dmm()}}:
 \itemize{
-\item \strong{Rows} = samples (one row per site, or per replicate - see
-\code{\link[=get_example_replicates]{get_example_replicates()}})
-\item \strong{Columns} = taxa, or ASVs; taxonomic annotation is not required
-\item \strong{Values} = non-negative integer read counts, not normalised
+\item \strong{Rows} are samples, one row per site
+\item \strong{Columns} are taxa or ASVs; taxonomic annotation is not required
+\item \strong{Values} are non-negative integer read counts, not normalised
 }
 
 If your count table is in long format (sample, taxon, count), pivot it:
@@ -78,7 +77,7 @@ count_matrix <- pivot_wider(
 \examples{
 d <- get_example_data()
 
-dim(d$counts)          # 20 sites x 33 taxa
+dim(d$counts)          # 20 sites by 32 taxa
 d$counts[1:3, 1:5]
 head(d$covariates)     # numeric only
 
@@ -90,6 +89,5 @@ eDNA_dmm_structure(fit, metadata = d$metadata, facet_var = "TrueCommunity")
 
 }
 \seealso{
-\code{\link[=get_example_replicates]{get_example_replicates()}} for the replicated version of the same
-survey, \code{\link[=simulate_eDNA_survey]{simulate_eDNA_survey()}} to generate your own.
+\code{\link[=simulate_eDNA_survey]{simulate_eDNA_survey()}} to generate your own.
 }

@@ -10,7 +10,6 @@ eDNA_clear_stan_cache()
 Invisibly \code{NULL}, called for its side effect.
 }
 \description{
-Forces recompilation of the Stan models on next use. Useful after updating
-the package, or if a cached model becomes stale/corrupted. Clears both the
-standard model and the replicate-aware model.
+Forces recompilation of the Stan model on next use. Useful after updating
+the package, or if a cached model becomes stale or corrupted.
 }

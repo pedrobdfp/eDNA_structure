@@ -14,7 +14,7 @@ A \link[rstan:stanmodel-class]{rstan::stanmodel} object.
 }
 \description{
 Returns the compiled \code{stanmodel} for \code{name}, loading it from the in-session
-cache, then the per-machine disk cache, and compiling from source only if
-neither is available.
+cache, then the per-machine disk cache (only if it still matches the
+installed .stan source), and compiling from source otherwise.
 }
 \keyword{internal}

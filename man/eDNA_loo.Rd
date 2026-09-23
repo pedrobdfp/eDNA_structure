@@ -2,14 +2,16 @@
 % Please edit documentation in R/eDNA_loo.R
 \name{eDNA_loo}
 \alias{eDNA_loo}
-\title{Compare DMM models across values of K using LOO cross-validation}
+\title{Compare DMM models across values of K}
 \usage{
 eDNA_loo(
   counts,
   covariates = NULL,
   K_range = 2:5,
   scale_covariates = TRUE,
-  chains = 1,
+  chains = 4,
+  cores = NULL,
+  method = c("STEPHENS", "ECR-pivot", "ECR-iterative"),
   iter = 4000,
   warmup = 2000,
   adapt_delta = 0.95,
@@ -17,71 +19,100 @@ eDNA_loo(
   conc = 0.5,
   alpha_shape = 5,
   alpha_rate = 2,
+  agreement_threshold = 0.9,
+  rhat_threshold = 1.1,
+  save_dir = NULL,
+  keep_fits = TRUE,
   verbose = TRUE
 )
 }
 \arguments{
-\item{counts}{A count matrix (same as passed to \code{\link[=eDNA_dmm]{eDNA_dmm()}}).}
+\item{counts, covariates, scale_covariates, conc, alpha_shape, alpha_rate}{Passed to \code{\link[=eDNA_dmm]{eDNA_dmm()}}.}
 
-\item{covariates}{A covariate matrix or data frame, or \code{NULL}.}
+\item{K_range}{Integer vector of \code{K} to evaluate. Default \code{2:5}.}
 
-\item{K_range}{An integer vector of K values to evaluate. Default is \code{2:5}.
-Example: \code{K_range = 2:7}.}
+\item{chains, cores, method, iter, warmup, adapt_delta, seed}{Passed to
+\code{\link[=eDNA_dmm]{eDNA_dmm()}}.}
 
-\item{scale_covariates}{Logical. Default \code{TRUE}. See \code{\link[=eDNA_dmm]{eDNA_dmm()}}.}
+\item{agreement_threshold}{Smallest acceptable share of samples on which two
+chains agree after alignment. Default \code{0.9}.}
 
-\item{chains}{Integer. Number of chains per fit. Default \code{1}.}
+\item{rhat_threshold}{Largest acceptable \code{lp__} Rhat. Default \code{1.1}.}
 
-\item{iter}{Integer. Iterations per chain. Default \code{4000}.}
+\item{save_dir}{Directory to write each fit to as \verb{fit_K<k>.rds}. When a
+file is already present it is loaded instead of refitted, which makes a
+long sweep resumable. \code{NULL} (default) saves nothing.}
 
-\item{warmup}{Integer. Warmup iterations. Default \code{2000}.}
+\item{keep_fits}{Keep every fit in the returned object. Default \code{TRUE}.
+Fits are large; with \code{save_dir} set, \code{FALSE} releases each one after
+scoring it and keeps memory flat across the sweep.}
 
-\item{adapt_delta}{Number. Default \code{0.95}.}
-
-\item{seed}{Integer. Default \code{13}.}
-
-\item{conc}{Number. Default \code{0.5}. See \code{\link[=eDNA_dmm]{eDNA_dmm()}}.}
-
-\item{alpha_shape}{Number. Default \code{5}. See \code{\link[=eDNA_dmm]{eDNA_dmm()}}.}
-
-\item{alpha_rate}{Number. Default \code{2}. See \code{\link[=eDNA_dmm]{eDNA_dmm()}}.}
-
-\item{verbose}{Logical. Default \code{TRUE}.}
+\item{verbose}{Print progress. Default \code{TRUE}.}
 }
 \value{
 A list with:
 \describe{
-\item{\code{loo_table}}{A data frame with LOO-ELPD estimates and SE per K.}
-\item{\code{loo_compare}}{The output of \code{\link[loo:loo_compare]{loo::loo_compare()}}.}
-\item{\code{plot}}{A \code{\link[ggplot2:ggplot]{ggplot2::ggplot()}} elbow plot of LOO-ELPD vs K.}
-\item{\code{fits}}{A named list of \code{edna_dmm_fit} objects, one per K.}
+\item{\code{loo_table}}{One row per \code{K}: \code{elpd} and \code{se} for the best chain,
+\code{best_chain}, \code{elpd_pooled}, \code{elpd_worst_chain}, \code{p_loo}, \code{pareto_bad},
+\code{n_obs}, \code{n_divergent}, \code{pct_permuted}, \code{lp_rhat}, \code{min_agreement},
+\code{max_agreement}, \code{pi_rhat}, \code{beta_rhat}, \code{identified}, \code{minutes}.}
+\item{\code{loo_by_chain}}{One row per chain per \code{K}: \code{elpd}, \code{se},
+\code{pareto_bad}, \code{lp_mean}. Plugs straight into
+\code{\link[=eDNA_dmm_k_diagnostics]{eDNA_dmm_k_diagnostics()}} as \code{elpd_by_run}.}
+\item{\code{loo_compare}}{Output of \code{\link[loo:loo_compare]{loo::loo_compare()}}, or \code{NULL} for a
+single \code{K}.}
+\item{\code{plot}}{ELPD against \code{K}, with the individual chains shown and any
+\code{K} whose chains disagreed left unfilled.}
+\item{\code{fits}}{Named list of fits, or of \code{NULL} when \code{keep_fits = FALSE}.}
 }
 }
 \description{
-Fits DMM models for a range of K values and compares them using
-Leave-One-Out cross-validation (LOO-CV) via the \code{loo} package. Returns
-both a comparison table and an elbow plot of LOO-ELPD vs K.
-
-LOO-ELPD (expected log predictive density) measures how well each model
-predicts held-out observations. Higher values are better. The "elbow",
-the point where additional communities yield diminishing LOO-ELPD gains,
-is a useful heuristic for choosing K.
+Fits a DMM for each value of \code{K} with \code{\link[=eDNA_dmm]{eDNA_dmm()}} and compares them by
+leave-one-out cross-validation (PSIS-LOO) via the \pkg{loo} package.
+Because every fit runs several chains whose labels are aligned, the sweep
+also reports whether the chains agreed on the same solution at each \code{K},
+which is a separate question from how well the model predicts.
 }
-\section{Replicated data}{
+\section{Reading the two answers separately}{
 
-\code{eDNA_loo()} always uses the standard (summed) model; it has no \code{replication}
-argument. This is deliberate. The replicate-aware model in \code{\link[=eDNA_dmm]{eDNA_dmm()}} gives
-each station its own composition parameter \code{theta_i}, so holding a station out
-leaves that station's own parameter unidentified and station-level LOO is not
-well defined. It is also considerably slower, which matters when sweeping many
-values of K.
+LOO ELPD says how well a model predicts a held-out sample. It almost always
+improves as \code{K} grows, because a more flexible mixture fits anything better,
+so it rarely identifies a stopping point on its own.
 
-The recommended workflow with replicated data is therefore: select K here on
-the summed model, then refit at the chosen K with \code{replication} supplied to
-\code{\link[=eDNA_dmm]{eDNA_dmm()}} for the final parameter estimates. If you have replicates, sum
-them per station for this step (e.g. \code{rowsum(rep_counts, replication)}).
+The alignment diagnostics say something different: whether the data pick out
+a single grouping of the samples at that \code{K}. When several chains settle on
+genuinely different partitions, no single partition can be reported, however
+well the model predicts. \code{lp_rhat} and \code{min_agreement} in \code{loo_table} carry
+that information, and \code{identified} combines them.
 }
 
+\section{Why \code{elpd} comes from one chain}{
+
+\code{elpd} is the score of the best single chain, not of the pooled posterior.
+PSIS-LOO weights each draw by \code{1 / p(y_i | theta)}, so draws that predict a
+sample worst carry the most weight. If the chains occupy different modes,
+pooling drags the estimate toward the worse mode, far enough that the pooled
+score can fall below every chain that went into it, which no predictive
+score for a mixture of those posteriors can legitimately do. The pooled
+value is still reported as \code{elpd_pooled}, and a warning is issued whenever
+it falls below \code{elpd_worst_chain}, but it should not be compared across \code{K}.
+
+A paired comparison between two values of \code{K} must therefore be built from
+one coherent posterior at each.
+}
+
+\examples{
+\dontrun{
+d   <- get_example_data()
+res <- eDNA_loo(d$counts, d$covariates, K_range = 2:6)
+
+res$loo_table[, c("K", "elpd", "lp_rhat", "min_agreement", "identified")]
+res$plot
+max(res$loo_table$K[res$loo_table$identified])   # largest identified K
+}
+
+}
 \seealso{
-\code{\link[=eDNA_dmm]{eDNA_dmm()}}
+\code{\link[=eDNA_dmm]{eDNA_dmm()}} for a single fit, \code{\link[=eDNA_dmm_k_diagnostics]{eDNA_dmm_k_diagnostics()}} for the
+wider set of diagnostics used to choose \code{K}.
 }

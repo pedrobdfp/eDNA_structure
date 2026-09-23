@@ -2,11 +2,11 @@
 
 S3method(print,edna_dmm_fit)
 S3method(summary,edna_dmm_fit)
+export(dmm_align_labels)
+export(dmm_beta_draws)
 export(dmm_taxon_order)
 export(eDNA_clear_stan_cache)
 export(eDNA_dmm)
-export(dmm_beta_draws)
-export(dmm_align_labels)
 export(eDNA_dmm_beta)
 export(eDNA_dmm_beta_intervals)
 export(eDNA_dmm_compositions)

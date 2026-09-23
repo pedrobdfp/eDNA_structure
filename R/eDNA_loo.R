@@ -257,14 +257,14 @@ eDNA_loo <- function(
 #' @description
 #' A small, deliberately plain example survey: a site by taxon count table plus
 #' the two numeric covariates that separate the communities. Twenty sites,
-#' 33 taxa, four true communities.
+#' 32 taxa, four true communities.
 #'
 #' Use it to learn the expected input format for [eDNA_dmm()], to follow the
 #' vignettes, or to check that an installation works.
 #'
 #' @section Data format:
 #' \describe{
-#'   \item{`counts`}{Integer matrix, 20 sites by 33 taxa. Rows are sites
+#'   \item{`counts`}{Integer matrix, 20 sites by 32 taxa. Rows are sites
 #'     (`STN_001` to `STN_020`), columns are taxa (`Sp_1`, `Sp_2`, and so on).
 #'     This is the only required input to [eDNA_dmm()].}
 #'   \item{`covariates`}{Data frame, 20 rows by 2 numeric columns: `Depth` in
@@ -286,10 +286,10 @@ eDNA_loo <- function(
 #' @section Community structure:
 #' Four communities separated by two covariates:
 #' \itemize{
-#'   \item **Community 1**: deep (80 m) and offshore (200 units)
-#'   \item **Community 2**: surface (10 m) and offshore (200 units)
-#'   \item **Community 3**: deep (80 m) and inshore (20 units)
-#'   \item **Community 4**: surface (10 m) and inshore (20 units)
+#'   \item **Community 1**: deep (70 m) and offshore (140 units)
+#'   \item **Community 2**: shallow (40 m) and offshore (140 units)
+#'   \item **Community 3**: deep (70 m) and inshore (100 units)
+#'   \item **Community 4**: shallow (40 m) and inshore (100 units)
 #' }
 #'
 #' @section Formatting your own data:
@@ -318,7 +318,7 @@ eDNA_loo <- function(
 #' @examples
 #' d <- get_example_data()
 #'
-#' dim(d$counts)          # 20 sites by 33 taxa
+#' dim(d$counts)          # 20 sites by 32 taxa
 #' d$counts[1:3, 1:5]
 #' head(d$covariates)     # numeric only
 #'
